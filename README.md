@@ -41,7 +41,7 @@ System design:
 
 + location
 
-+ submission deadline
++ submission deadline (apply deadline)
 
 + company information
 
@@ -51,5 +51,5 @@ System design:
 
 + job domain
 
-+ experiment 
++ experience
 ```

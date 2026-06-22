@@ -1,0 +1,39 @@
+===============================================================================
+                           ORCHESTRATION (CONTROL FLOW)
+===============================================================================
+                               [ Apache Airflow ]
+                                (The Orchestrator)
+                                 |  |  |  |  |
+      Schedules, Triggers &      |  |  |  |  |
+      Monitors the Pipeline -----+--+--+--+--+
+                                      |
+===============================================================================
+                            DATA PIPELINE (DATA FLOW)
+===============================================================================
+
+[ DATA SOURCES ]      (Facebook, Web Portals, LinkedIn, etc.)
+       │
+       │  Extract / Scrape
+       ▼
+[ PYTHON SCRAPERS ]   <--- (Triggered by Airflow)
+       │
+       │  Dump Raw HTML/JSON 
+       ▼
+[ BRONZE LAYER ]      [ MinIO ] 
+                      (Raw Data Storage / Object Storage)
+       │
+       │  Read, Clean, Standardize
+       ▼
+[ SILVER LAYER ]      [ Python + Pandas / Polars ] <--- (Triggered by Airflow)
+       │              (Data Processing & Transformation)
+       │
+       ├─────────────────────────────────┐  Load & Index
+       ▼                                 ▼
+[ GOLD LAYER ]                     [ GOLD LAYER ]
+[ PostgreSQL ]                     [ Elasticsearch ]
+(Data Warehouse /                  (Full-text Search Engine)
+ Analytics Base)                         │
+                                         │  Connect & Visualize
+                                         ▼
+                                   [ Kibana ]
+                                   (Dashboards & Visualizations)
