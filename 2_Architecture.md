@@ -1,68 +1,153 @@
-# 🌊 JobLake System Architecture
+# JobLake Architecture
 
-> A lightweight, scalable data engineering pipeline designed to scrape, standardize, validate, and index job market data with high performance.
+> Medallion Architecture (Bronze → Silver → Gold) for job data ingestion, standardization, validation, analytics, and search.
 
 ---
 
-## 🏗️ Architecture Diagram
+## Components
 
-The system implements a **Medallion Architecture** (Bronze, Silver, Gold), orchestrated by Apache Airflow, with a strict Data Contract validation step using Pydantic.
+| Layer | Technology | Purpose |
+|---------|---------|---------|
+| Orchestration | Airflow | Schedule & monitor pipelines |
+| Bronze | MinIO | Raw HTML / JSON storage |
+| Silver | Polars + Pydantic | Standardize & validate data |
+| Gold | PostgreSQL | Source of truth & analytics |
+| Search | Elasticsearch | Full-text search |
+| Visualization | Kibana | Dashboards & monitoring |
+
+---
+
+## Data Flow
 
 ```mermaid
-graph TD
-    %% Control Plane - Orchestration
-    subgraph Control_Plane [Orchestration]
-        A([⚙️ Apache Airflow])
-    end
+graph LR
 
-    %% Data Sources
-    subgraph Data_Sources [External Data]
-        S[🌐 External Sources<br>IT Boards, Facebook]
-    end
+A[Job Sources]
+--> B[Bronze<br/>MinIO]
 
-    %% Data Lake Layers
-    subgraph Bronze [Bronze Layer - Raw Storage]
-        M[(🪣 MinIO)]
-    end
+B --> C[Transform & Validate<br/>Polars + Pydantic]
 
-    subgraph Silver [Silver Layer - Processing]
-        P[🐼 Python + Pandas]
-    end
+C --> D[Silver<br/>Standardized Data]
 
-    %% Validation Layer
-    subgraph Quality_Gate [Data Quality Gate]
-        Q{🛡️ Pydantic}
-    end
+D --> E[PostgreSQL]
 
-    %% Serving Layers
-    subgraph Gold [Gold Layer - Serving]
-        PG[(🐘 PostgreSQL)]
-        ES[(🔍 Elasticsearch)]
-    end
+D --> F[Elasticsearch]
 
-    subgraph Visualization [UI & Monitoring]
-        K[📊 Kibana]
-    end
+F --> G[Kibana]
 
-    %% Data Flow Pathways (Solid Lines)
-    S -- "Extract & Dump Raw (JSON/HTML)" --> M
-    M -- "Read, Cleanse, Standardize" --> P
-    P -- "Validate Schema & Types" --> Q
-    Q -- "Valid Records: Load Relational" --> PG
-    Q -- "Valid Records: Index Full-Text" --> ES
-    Q -. "Invalid Records: Dead Letter Queue" .-> M
+H[Airflow]
+-. Orchestrates .->
+B
 
-    %% Control Flow Pathways (Dotted Lines)
-    A -. "Schedules & Triggers Scrapers" .-> S
-    A -. "Triggers Pandas Pipeline" .-> P
+H
+-. Orchestrates .->
+C
+```
 
-    %% Component Styling
-    classDef bronze fill:#cd7f32,stroke:#333,stroke-width:1px,color:#fff;
-    classDef silver fill:#c0c0c0,stroke:#333,stroke-width:1px,color:#000;
-    classDef quality fill:#4CAF50,stroke:#333,stroke-width:1px,color:#fff;
-    classDef gold fill:#ffd700,stroke:#333,stroke-width:1px,color:#000;
-    
-    class M bronze;
-    class P silver;
-    class Q quality;
-    class PG,ES gold;
+---
+
+## Data Layers
+
+### Bronze
+
+Raw immutable data.
+
+Examples:
+
+```text
+linkedin/*.json
+facebook/*.json
+website/*.html
+```
+
+Purpose:
+
+- Replay pipelines
+- Debug parsing issues
+- Preserve source data
+
+---
+
+### Silver
+
+Standardized and validated records.
+
+Example schema:
+
+```yaml
+job_id:
+job_title:
+company_name:
+location:
+salary_min:
+salary_max:
+source:
+source_url:
+posted_at:
+```
+
+Purpose:
+
+- Data quality checks
+- Schema normalization
+- Reprocessing support
+
+---
+
+### Gold
+
+Business-ready datasets.
+
+#### PostgreSQL
+
+Source of truth for:
+
+- Analytics
+- Reporting
+- Application APIs
+
+#### Elasticsearch
+
+Optimized for:
+
+- Full-text search
+- Filtering
+- Ranking
+
+Can be rebuilt from PostgreSQL at any time.
+
+---
+
+## Data Quality
+
+Validation rules:
+
+- Required fields
+- Type validation
+- Salary consistency
+- Duplicate detection
+- Missing value monitoring
+
+Failed records:
+
+```text
+Bronze
+ └── rejected/
+```
+
+Metrics:
+
+- job_count
+- duplicate_rate
+- missing_salary_rate
+- validation_fail_rate
+
+---
+
+## Design Principles
+
+- MinIO stores all raw data
+- PostgreSQL is the source of truth
+- Elasticsearch is a search index
+- Airflow orchestrates, not transforms
+- Every layer can be rebuilt from Bronze
