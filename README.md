@@ -16,6 +16,9 @@ System design:
 + 12 Infrastructure
 + 13 Monitoring
 + 14 Security
++ 15 Crawler / Ingestion Strategy
++ 16 Data Lifecycle & Retention Policy
++ 17 CI/CD & Schema Evolution 
 
 ``
 
