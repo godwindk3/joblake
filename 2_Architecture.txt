@@ -27,7 +27,13 @@
 [ SILVER LAYER ]      [ Python + Pandas / Polars ] <--- (Triggered by Airflow)
        │              (Data Processing & Transformation)
        │
-       ├─────────────────────────────────┐  Load & Index
+       │  Validate Schema & Types (Data Contract)
+       ▼
+[ QUALITY GATE ]      [ Pydantic ] 
+       │              (Filters bad records, ensures strict schema matching)
+       │              (Invalid data goes to logs or Dead Letter Queue)
+       │
+       ├─────────────────────────────────┐  Load & Index (Only Validated Data)
        ▼                                 ▼
 [ GOLD LAYER ]                     [ GOLD LAYER ]
 [ PostgreSQL ]                     [ Elasticsearch ]
