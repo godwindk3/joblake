@@ -43,3 +43,28 @@
                                          ▼
                                    [ Kibana ]
                                    (Dashboards & Visualizations)
+========================================================================================================================================
+joblake/
+
+├── ingestion/
+
+│   ├── sources/
+│   │
+│   ├── parsers/
+│   │
+│   ├── models/
+│   │
+│   ├── factory/
+│   │
+│   ├── scrapy/
+│   │   ├── spiders/
+│   │   └── settings.py
+│   │
+│   └── services/
+
+├── bronze/
+├── silver/
+├── gold/
+├── search/
+├── orchestration/
+└── common/
