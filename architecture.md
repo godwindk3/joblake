@@ -1,19 +1,20 @@
 # JobLake Architecture
 
-> Medallion Architecture (Bronze → Silver → Gold) for job data ingestion, standardization, validation, analytics, and search.
+> Medallion Architecture (Bronze → Silver → Gold) for job data ingestion, validation, analytics, and search.
 
 ---
 
 ## Components
 
-| Layer | Technology | Purpose |
-|---------|---------|---------|
-| Orchestration | Airflow | Schedule & monitor pipelines |
-| Bronze | MinIO | Raw HTML / JSON storage |
-| Silver | Polars + Pydantic | Standardize & validate data |
-| Gold | PostgreSQL | Source of truth & analytics |
-| Search | Elasticsearch | Full-text search |
-| Visualization | Kibana | Dashboards & monitoring |
+| Layer         | Technology          | Purpose                                        |
+| ------------- | ------------------- | ---------------------------------------------- |
+| Orchestration | Airflow             | Schedule, monitor, and retry pipelines         |
+| Ingestion     | Scrapy + Playwright | Crawl job data from websites and dynamic pages |
+| Bronze        | MinIO               | Raw HTML / JSON storage                        |
+| Silver        | Polars + Pydantic   | Standardize, clean, and validate data          |
+| Gold          | PostgreSQL          | Source of truth for analytics and applications |
+| Search        | Elasticsearch       | Full-text search and filtering                 |
+| Visualization | Kibana              | Monitoring and operational dashboards          |
 
 ---
 
@@ -23,25 +24,25 @@
 graph LR
 
 A[Job Sources]
---> B[Bronze<br/>MinIO]
+--> B[Scrapy / Playwright]
 
-B --> C[Transform & Validate<br/>Polars + Pydantic]
+B --> C[Bronze<br/>MinIO]
 
-C --> D[Silver<br/>Standardized Data]
+C --> D[Transform & Validate<br/>Polars + Pydantic]
 
-D --> E[PostgreSQL]
+D --> E[Silver<br/>Standardized Dataset]
 
-D --> F[Elasticsearch]
+E --> F[PostgreSQL]
 
-F --> G[Kibana]
+E --> G[Elasticsearch]
 
-H[Airflow]
--. Orchestrates .->
-B
+G --> H[Kibana]
 
-H
--. Orchestrates .->
-C
+I[Airflow]
+-. Schedules .-> B
+
+I
+-. Orchestrates .-> D
 ```
 
 ---
@@ -50,27 +51,29 @@ C
 
 ### Bronze
 
-Raw immutable data.
+Raw immutable source data.
 
 Examples:
 
 ```text
 linkedin/*.json
 facebook/*.json
-website/*.html
+company_site/*.html
+job_board/*.json
 ```
 
 Purpose:
 
-- Replay pipelines
-- Debug parsing issues
-- Preserve source data
+* Preserve original source data
+* Replay pipelines
+* Debug extraction issues
+* Support future parser improvements
 
 ---
 
 ### Silver
 
-Standardized and validated records.
+Standardized and validated job records.
 
 Example schema:
 
@@ -81,16 +84,20 @@ company_name:
 location:
 salary_min:
 salary_max:
+currency:
+employment_type:
 source:
 source_url:
 posted_at:
+scraped_at:
 ```
 
 Purpose:
 
-- Data quality checks
-- Schema normalization
-- Reprocessing support
+* Schema normalization
+* Data quality enforcement
+* Deduplication
+* Reprocessing support
 
 ---
 
@@ -102,19 +109,29 @@ Business-ready datasets.
 
 Source of truth for:
 
-- Analytics
-- Reporting
-- Application APIs
+* Analytics
+* Reporting
+* Internal APIs
+* Downstream applications
+
+Example use cases:
+
+* Salary analysis
+* Skill demand trends
+* Hiring market insights
 
 #### Elasticsearch
 
 Optimized for:
 
-- Full-text search
-- Filtering
-- Ranking
+* Full-text search
+* Filtering
+* Ranking
 
-Can be rebuilt from PostgreSQL at any time.
+Notes:
+
+* Elasticsearch is a serving layer
+* Can be rebuilt from PostgreSQL at any time
 
 ---
 
@@ -122,32 +139,43 @@ Can be rebuilt from PostgreSQL at any time.
 
 Validation rules:
 
-- Required fields
-- Type validation
-- Salary consistency
-- Duplicate detection
-- Missing value monitoring
+* Required fields
+* Type validation
+* Salary consistency
+* URL validation
+* Duplicate detection
+* Missing value monitoring
 
 Failed records:
 
 ```text
-Bronze
- └── rejected/
+bronze/
+└── rejected/
 ```
 
 Metrics:
 
-- job_count
-- duplicate_rate
-- missing_salary_rate
-- validation_fail_rate
+```text
+job_count
+new_job_count
+duplicate_rate
+missing_salary_rate
+validation_fail_rate
+crawl_success_rate
+```
 
 ---
 
 ## Design Principles
 
-- MinIO stores all raw data
-- PostgreSQL is the source of truth
-- Elasticsearch is a search index
-- Airflow orchestrates, not transforms
-- Every layer can be rebuilt from Bronze
+* Scrapy handles most crawling tasks
+* Playwright is used only for JavaScript-heavy websites
+* MinIO stores all raw data
+* PostgreSQL is the source of truth
+* Elasticsearch is a search index, not a database
+* Airflow orchestrates, not transforms
+* Every layer can be rebuilt from Bronze
+* Pipelines should be idempotent and retryable
+
+```
+```

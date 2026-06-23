@@ -13,7 +13,7 @@
 
 [ DATA SOURCES ]      (Facebook, Web Portals, LinkedIn, etc.)
        │
-       │  Extract / Scrape
+       │  Extract / Scrape [Scrapy, BeautifulSoup, Playwright,...]
        ▼
 [ PYTHON SCRAPERS ]   <--- (Triggered by Airflow)
        │
