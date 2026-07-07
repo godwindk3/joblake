@@ -1,6 +1,14 @@
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 
+def parse(html):
+    soup = BeautifulSoup(html, "html.parser")
+    results = soup.select(".job-tags")
+    # print(type(soup.select(".job-tags")))
+    for result in results:
+        clean_text = result.get_text(separator= " ", strip=True)
+        print(clean_text)
+
 with sync_playwright() as p:
     browser = p.chromium.launch(
         headless=True,
@@ -21,9 +29,12 @@ with sync_playwright() as p:
 
     html = page.content()
 
-    print(html)
+    parse(html)
 
     browser.close()
+
+
+
 
 
 
