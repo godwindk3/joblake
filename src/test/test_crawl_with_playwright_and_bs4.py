@@ -46,13 +46,13 @@ def get_page_html(url : str) -> str:
         browser.close()
         return html
     
+def print_html(html : str) -> None:
+    print(html)
+
+    
 
 url = "https://www.topcv.vn/viec-lam/devops-engineer-ha-noi/2103701.html?ta_source=JobSearchList_LinkDetail&u_sr_id=WFqapEbhH6bZXJ2kh4VCXesMpci1ykUrSXT43a7y_1783584911"
 premium_url = "https://www.topcv.vn/brand/fptsoftwareacademy/tuyen-dung/thuc-tap-sinh-devops-j1683787.html?ta_source=JobSearchList_LinkDetail&u_sr_id=WFqapEbhH6bZXJ2kh4VCXesMpci1ykUrSXT43a7y_1783584911"
-html = get_page_html(url)
-parse(html=html)
+html = get_page_html("https://www.topcv.vn/tim-viec-lam-moi-nhat?company_field=1&type_keyword=1&sba=1&saturday_status=0")
 
-
-# soup = BeautifulSoup(html, "html.parser")
-# print(soup.select_one(".job-detail__info--section-content-value"))
-# print(page.title())
+print_html(html=html)
