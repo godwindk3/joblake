@@ -65,6 +65,6 @@ def extract_urls_from_html(html: str) -> list:
     
 
 
-html = fetch("https://www.topcv.vn/tim-viec-lam-moi-nhat?company_field=1&type_keyword=1&sba=1&saturday_status=0")
+html = fetch("https://www.topcv.vn/tim-viec-lam-moi-nhat?company_field=1&type_keyword=1&page=2&saturday_status=0&sba=1")
 # save_to_txt(html=html, filename="check.txt")
-print(len(extract_urls_from_html(html=html)))
+print(extract_urls_from_html(html=html))
