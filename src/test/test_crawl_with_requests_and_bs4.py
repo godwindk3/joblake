@@ -6,6 +6,7 @@ import json
 import re
 import time
 import random   
+from playwright.sync_api import sync_playwright
 
 def slice_html_regex(html_content: str) -> str:
     # Pattern explanation:
@@ -100,11 +101,11 @@ def extract_urls_from_html(html: str) -> list:
 
     return list(dict.fromkeys(extracted_urls))
 
-def fetch_all_it_jobs_page(base_url: str) -> list:
+def fetch_all_it_jobs_page(base_url: str, page_number: int = 5) -> list:
 
     htmls = []
 
-    for i in range(1, 5):
+    for i in range(1, page_number):
         payload = {
             "type_keyword": 1,
             "category_family": "r257",
@@ -116,17 +117,77 @@ def fetch_all_it_jobs_page(base_url: str) -> list:
         htmls.append(page_html)
         print(f"Finish page {i}")
 
-        sleep_time = random.uniform(4.0, 6.5)
+        sleep_time = random.uniform(4.0, 6)
 
-        print(f"Waiting{sleep_time:.2f} seconds....")
+        print(f"Waiting: {sleep_time:.2f} seconds....")
 
         time.sleep(sleep_time)
 
         
     return htmls
 
-    
+def extract_html_from_single_url(url: str) -> str:
+    print(url)
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"],
+            )
+        
+        try:
+            context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            )
+            page = context.new_page()
+            page.goto(url)
 
+            if page.content():
+                print(f"Finish {url}")
+                export_file_by_url(page.content())
+            else:
+                print(f"Error at {url}")
+
+            return page.content()
+
+        finally:
+            browser.close()
+
+def extract_html_from_a_page(page: list) -> list:
+    html_page = []
+
+    for url in page:
+
+        html_page.append(extract_html_from_single_url(url=url))
+
+        sleep_time = random.uniform(4.0, 6)
+        print(f"Waiting: {sleep_time:.2f} seconds")
+
+        time.sleep(sleep_time)
+
+    return html_page
+
+def extract_html_from_a_list_page(list_page: list) -> list:
+    html_list_page = []
+    index = 1
+
+    for page in list_page:
+        print(page)
+        print(f"Start page {index}")
+        html_list_page.append(extract_html_from_a_page(page=page))
+        index += 1
+    
+    return html_list_page
+
+def export_file(data: list) -> None:
+    with open("result_test.txt", "w", encoding="utf-8") as f:
+        for item in data:
+            f.write(item + "\n")
+
+def export_file_by_url(data: str) -> None:
+    with open("result_test.txt", "w", encoding="utf-8") as f:
+        f.write(data + "\n")
+        f.write("\n" + "="*80 + "\n\n")
+    
 
 # html = fetch("https://www.topcv.vn/tim-viec-lam-moi-nhat?company_field=1&type_keyword=1&page=3&saturday_status=0&sba=1")
 # # save_to_txt(html=html, filename="check.txt")
@@ -138,10 +199,15 @@ def fetch_all_it_jobs_page(base_url: str) -> list:
 # Encode string to UTF-8 to calculate the exact byte size
 url = "https://www.topcv.vn/tim-viec-lam-cong-nghe-thong-tin-cr257?type_keyword=1&page=2&category_family=r257&saturday_status=0"
 base_url = "https://www.topcv.vn/tim-viec-lam-cong-nghe-thong-tin-cr257"
-result = fetch_all_it_jobs_page(base_url=base_url)
+list_page = fetch_all_it_jobs_page(base_url=base_url, page_number=2)
 # print(len(result))
 # print(result[-1])
-extracted_url = extract_urls_from_html(result[-1])
-print(extracted_url)
-print(len(extracted_url))
+page = extract_urls_from_html(list_page[-1])
+print(page)
+print(len(page))
+htmls = extract_html_from_a_page(page)
+
+
+
+
 
