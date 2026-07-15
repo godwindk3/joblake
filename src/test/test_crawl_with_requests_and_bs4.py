@@ -101,6 +101,14 @@ def extract_urls_from_html(html: str) -> list:
 
     return list(dict.fromkeys(extracted_urls))
 
+def extract_urls_from_list_page(list_page: list) -> list:
+    
+    pages = []
+    for p in list_page:
+        pages.append(extract_urls_from_html(html=p))
+
+    return pages
+
 def fetch_all_it_jobs_page(base_url: str, page_number: int = 5) -> list:
 
     htmls = []
