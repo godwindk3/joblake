@@ -3,47 +3,146 @@ import time
 import random 
 from bs4 import BeautifulSoup
 import json
+import logging
+from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
-def extract_urls_from_html(html: str) -> list:
-    soup = BeautifulSoup(html, "html.parser")
-    extracted_urls = []
-    # Find all <script type = "applocation/ld+json"> tags
-    json_ld_tags = soup.find_all('script', type='application/ld+json')
+# def extract_urls_from_html(html: str) -> list[str]:
+#     soup = BeautifulSoup(html, "html.parser")
+#     extracted_urls = []
+#     # Find all <script type = "applocation/ld+json"> tags
+#     json_ld_tags = soup.find_all('script', type='application/ld+json')
     
-    for tag in json_ld_tags:
-        try:
-            data = json.loads(tag.string)
-            if isinstance(data, dict):
-                items = [data]
-            elif isinstance(data, list):
-                items = data
-            else:
-                continue
+#     for tag in json_ld_tags:
+#         try:
+#             data = json.loads(tag.string)
+#             if isinstance(data, dict):
+#                 items = [data]
+#             elif isinstance(data, list):
+#                 items = data
+#             else:
+#                 continue
             
-            for item in items:
-                if item.get("mainEntity").get('@type') == 'ItemList' and 'itemListElement' in item['mainEntity']:
+#             for item in items:
+#                 if item.get("mainEntity").get('@type') == 'ItemList' and 'itemListElement' in item['mainEntity']:
                     
-                    for element in item['mainEntity']['itemListElement']:
-                        if isinstance(element, dict) and 'url' in element:
-                            extracted_urls.append(element['url'])
-                        elif isinstance(element, dict) and 'item' in element and isinstance(element['item'], dict):     # Can only use this
-                            if 'url' in element['item']:
-                                extracted_urls.append(element['item']['url'])
-                elif 'url' in item:
-                    extracted_urls.append(item['url'])
-        except (json.JSONDecodeError, TypeError, AttributeError) as e:
+#                     for element in item['mainEntity']['itemListElement']:
+#                         if isinstance(element, dict) and 'url' in element:
+#                             extracted_urls.append(element['url'])
+#                         elif isinstance(element, dict) and 'item' in element and isinstance(element['item'], dict):     # Can only use this
+#                             if 'url' in element['item']:
+#                                 extracted_urls.append(element['item']['url'])
+#                 elif 'url' in item:
+#                     extracted_urls.append(item['url'])
+#         except (json.JSONDecodeError, TypeError, AttributeError) as e:
+#             continue
+
+#     return list(dict.fromkeys(extracted_urls))
+
+def extract_urls_from_item_list(
+    main_entity: dict[str, Any],
+) -> list[str]:
+    urls: list[str] = []
+
+    elements = main_entity.get("itemListElement", [])
+
+    if not isinstance(elements, list):
+        return urls
+    
+    for element in elements:
+        if not isinstance(element, dict):
             continue
 
+        direct_url = element.get("url")
+        if isinstance(direct_url, str):
+            urls.append(direct_url)
+            continue
+
+        nested_item = element.get("item")
+
+        if isinstance(nested_item, dict):
+            nested_url = nested_item.get("url")
+
+            if isinstance(nested_url, str):
+                urls.append(nested_url)
+    return urls
+
+        
+        
+
+def extract_urls_from_json_ld_item(
+    item: dict[str, Any],
+) -> list[str]:
+    
+    urls: list[str] = []
+
+    main_entity = item.get("mainEntity")
+
+    if (
+        isinstance(main_entity, dict)
+        and main_entity.get("@type") == "ItemList"
+    ):
+        urls.extend(
+            extract_urls_from_item_list(main_entity)
+        )
+    
+    direct_url = item.get("url")
+
+    if isinstance(direct_url, str):
+        urls.append(direct_url)
+    
+    return urls
+
+def extract_urls_from_html(html: str) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    extracted_urls: list[str] = []
+
+    json_ld_tags = soup.find_all(
+        "script",
+        type="application/ld+json",
+    )
+
+    for tag_index, tag in enumerate(json_ld_tags):
+        raw_json = tag.get_text(strip=True)
+
+        if not raw_json:
+            continue
+
+        try:
+            data = json.loads(raw_json)
+        except json.JSONDecodeError as exc:
+            logger.warning(
+                "Failed to decode JSON-LD tag %d: %s",
+                tag_index,
+                exc,
+            )
+            continue
+
+        if isinstance(data, dict):
+            items = [data]
+        elif isinstance(data, list):
+            items = data
+        else:
+            continue
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            extracted_urls.extend(
+                extract_urls_from_json_ld_item(item)
+            )
+    
     return list(dict.fromkeys(extracted_urls))
 
-# This take a list of page that use for extract urls in each page and return a list of urls for each pages
-def extract_urls_from_list_page(list_page: list) -> list:
-    
-    pages = []
-    for p in list_page:
-        pages.append(extract_urls_from_html(html=p))
 
-    return pages
+def extract_urls_from_html_pages(
+    html_pages: list[str],
+) -> list[list[str]]:
+    return [
+        extract_urls_from_html(html)
+        for html in html_pages
+    ]
 
 

@@ -1,56 +1,141 @@
+import logging
+import random
 import time
-import random   
-from playwright.sync_api import sync_playwright
+from dataclasses import dataclass
+from collections.abc import Iterator
 
-def extract_html_from_single_url(url: str) -> str:
-    print(url)
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"],
+from playwright.sync_api import (
+    BrowserContext,
+    Error as PlaywrightError,
+    Page,
+    TimeoutError as PlaywrightTimeoutError,
+    sync_playwright,
+)
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
+
+@dataclass
+class CrawlResult:
+    url: str
+    html: str | None
+    success: bool
+    error: str | None = None
+
+def fetch_detail_html(
+    page: Page,
+    url: str,
+    timeout_ms: int = 30_000,
+) -> CrawlResult:
+    try:
+        response = page.goto(
+            url,
+            wait_until="domcontentloaded",
+            timeout=timeout_ms,
+        )
+
+        if response is not None and not response.ok:
+            return CrawlResult(
+                url=url,
+                html=None,
+                success=False,
+                error=f"HTTP status: {response.status}",
             )
         
-        try:
-            context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        html = page.content()
+
+        if not html.strip():
+            return CrawlResult(
+                url=url,
+                html=None,
+                success=False,
+                error="Empty HTML",
             )
-            page = context.new_page()
-            page.goto(url)
+        
+        logger.info("Finished crawling %s", url)
 
-            if page.content():
-                print(f"Finish {url}")
-                # export_file_by_url(page.content())
-            else:
-                print(f"Error at {url}")
+        return CrawlResult(
+            url=url,
+            html=html,
+            success=True,
+        )
+    
+    except PlaywrightTimeoutError:
+        logger.warning("Timeout while crawling %s", url)
 
-            return page.content()
+        return CrawlResult(
+            url=url,
+            html=None,
+            success=False,
+            error="Timeout"
+        )
+    
+    except PlaywrightError as exc:
+        logger.exception("Playwright error while crawling %s", url)
 
+        return CrawlResult(
+            url=url,
+            html=None,
+            success=False,
+            error=str(exc),
+        )
+    
+def crawl_detail_pages(
+    urls: list[str],
+    min_delay: float = 4.0,
+    max_delay: float = 6.0,
+) -> Iterator[CrawlResult]:
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled"
+            ]
+        )
+
+        context: BrowserContext = browser.new_context(
+            user_agent=DEFAULT_USER_AGENT,
+        )
+
+        page = context.new_page()
+
+        try:
+            for index, url in enumerate(urls):
+                result = fetch_detail_html(
+                    page=page,
+                    url=url,
+                )
+
+                yield result
+
+                if index < len(urls) - 1:
+                    sleep_time = random.uniform(
+                        min_delay,
+                        max_delay,
+                    )
+
+                    logger.info(
+                        "Waiting %.2f seconds",
+                        sleep_time,
+                    )
+
+                    time.sleep(sleep_time)
         finally:
+            context.close()
             browser.close()
 
-def extract_html_from_a_page(page: list) -> list:
-    html_page = []
+urls = [
+    "https://www.topcv.vn/viec-lam/ui-ux-designer/2228808.html",
+    "https://www.topcv.vn/viec-lam/system-engineer-crm-du-an-cntt/2184652.html"
+]
 
-    for url in page:
-
-        html_page.append(extract_html_from_single_url(url=url))
-
-        sleep_time = random.uniform(4.0, 6)
-        print(f"Waiting: {sleep_time:.2f} seconds")
-
-        time.sleep(sleep_time)
-
-    return html_page
-
-# Mainly using this function to extract all html of each url
-def extract_html_from_a_list_page(list_page: list) -> list:
-    html_list_page = []
-    index = 1
-
-    for page in list_page:
-        print(page)
-        print(f"Start page {index}")
-        html_list_page.append(extract_html_from_a_page(page=page))
-        index += 1
-    
-    return html_list_page
+for result in crawl_detail_pages(urls):
+    if result.success:
+        print(result.url, len(result.html or ""))
+    else:
+        print(result.url, result.error)
