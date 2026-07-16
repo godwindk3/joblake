@@ -207,13 +207,14 @@ def export_file_by_url(data: str) -> None:
 # Encode string to UTF-8 to calculate the exact byte size
 url = "https://www.topcv.vn/tim-viec-lam-cong-nghe-thong-tin-cr257?type_keyword=1&page=2&category_family=r257&saturday_status=0"
 base_url = "https://www.topcv.vn/tim-viec-lam-cong-nghe-thong-tin-cr257"
-list_page = fetch_all_it_jobs_page(base_url=base_url, page_number=2)
+list_page = fetch_all_it_jobs_page(base_url=base_url, page_number=3)
 # print(len(result))
 # print(result[-1])
-page = extract_urls_from_html(list_page[-1])
+# page = extract_urls_from_html(list_page[-1])
+page = extract_urls_from_list_page(list_page)
 print(page)
 print(len(page))
-htmls = extract_html_from_a_page(page)
+htmls = extract_html_from_a_list_page(page)
 
 
 
