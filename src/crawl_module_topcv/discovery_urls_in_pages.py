@@ -107,10 +107,15 @@ def extract_urls_from_html(html: str) -> list[str]:
 
 def extract_urls_from_html_pages(
     html_pages: list[str],
-) -> list[list[str]]:
-    return [
-        extract_urls_from_html(html)
-        for html in html_pages
-    ]
+) -> list[str]:
+    urls: list[str] = []
+
+    for html in html_pages:
+        urls.extend(extract_urls_from_html(html))
+
+    return list(dict.fromkeys(urls))
+    
+
+    
 
 

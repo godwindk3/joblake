@@ -131,11 +131,14 @@ def crawl_detail_pages(
 
 urls = [
     "https://www.topcv.vn/viec-lam/ui-ux-designer/2228808.html",
-    "https://www.topcv.vn/viec-lam/system-engineer-crm-du-an-cntt/2184652.html"
+    "https://www.topcv.vn/viec-lam/system-engineer-crm-du-an-cntt/2184652.html",
 ]
 
-for result in crawl_detail_pages(urls):
-    if result.success:
-        print(result.url, len(result.html or ""))
-    else:
-        print(result.url, result.error)
+
+
+def process_crawled_details(urls: list[str]) -> None:
+    for result in crawl_detail_pages(urls):
+        if result.success:
+            print(result.url, len(result.html or ""))
+        else:
+            print(result.url, result.error)
