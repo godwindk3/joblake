@@ -131,14 +131,30 @@ def crawl_detail_pages(
 
 urls = [
     "https://www.topcv.vn/viec-lam/ui-ux-designer/2228808.html",
-    "https://www.topcv.vn/viec-lam/system-engineer-crm-du-an-cntt/2184652.html",
+    # "https://www.topcv.vn/viec-lam/system-engineer-crm-du-an-cntt/2184652.html",
 ]
 
+def save_to_txt(html: str, filename: str) -> bool:
+    """
+    Save html to txt to check
+    """
+    try:
+        with open(filename, "w", encoding="utf-8") as file:
+            file.write(html)
+        print("Done")
+        return True
+    except Exception as e:
+        print("Error!!")
+        return False
 
 
 def process_crawled_details(urls: list[str]) -> None:
     for result in crawl_detail_pages(urls):
         if result.success:
+            # save_to_txt(result.html, "html_test.txt")
             print(result.url, len(result.html or ""))
         else:
             print(result.url, result.error)
+
+# process_crawled_details(urls)
+
