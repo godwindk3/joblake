@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 import json
 import logging
 from typing import Any
+from collections.abc import Iterable
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ def extract_urls_from_html(html: str) -> list[str]:
 
 
 def extract_urls_from_html_pages(
-    html_pages: list[str],
+    html_pages: Iterable[str],
 ) -> list[str]:
     urls: list[str] = []
 

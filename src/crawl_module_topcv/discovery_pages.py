@@ -2,6 +2,7 @@ import time
 import random
 import requests
 from typing import Any
+from collections.abc import Iterator
 
 
 def fetch(
@@ -26,7 +27,7 @@ def fetch_all_it_jobs_pages(
     total_pages: int = 5,
     min_delay: float = 4.0,
     max_delay: float = 6.0,
-) -> list[str]:
+) -> Iterator[str]:
     
     html_pages: list[str] = []
 
@@ -44,13 +45,15 @@ def fetch_all_it_jobs_pages(
                     session=session,
                     base_url=base_url, 
                     params=params,
-                    )
+                )
             except requests.RequestException as exc:
                 print(f"Failed to fetch page {page}: {exc}")
                 continue
 
-            html_pages.append(page_html)
+
             print(f"Finished fetching page {page}")
+
+            yield page_html
 
             if page < total_pages:
                 sleep_time = random.uniform(
@@ -62,7 +65,7 @@ def fetch_all_it_jobs_pages(
                 time.sleep(sleep_time)
 
         
-    return html_pages
+    
 
 # base_url = "https://www.topcv.vn/tim-viec-lam-cong-nghe-thong-tin-cr257"
 # html_pages = fetch_all_it_jobs_pages(base_url=base_url, total_pages=1)
