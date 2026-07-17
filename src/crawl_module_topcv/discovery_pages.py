@@ -28,8 +28,6 @@ def fetch_all_it_jobs_pages(
     min_delay: float = 4.0,
     max_delay: float = 6.0,
 ) -> Iterator[str]:
-    
-    html_pages: list[str] = []
 
     with requests.Session() as session:
         for page in range(1, total_pages + 1):
