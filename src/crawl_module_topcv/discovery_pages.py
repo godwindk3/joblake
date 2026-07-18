@@ -53,6 +53,8 @@ def fetch_all_it_jobs_pages(
 
             yield page_html
 
+            del page_html
+
             if page < total_pages:
                 sleep_time = random.uniform(
                     min_delay,
