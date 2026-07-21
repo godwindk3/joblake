@@ -16,6 +16,15 @@ def fetch(
         params=params,
         timeout=timeout,
     )
+
+    print("Final URL: ", response.url)
+    print("Status:", response.status_code)
+    print("Server:", response.headers.get("Server"))
+    print("Retry-After:", response.headers.get("Retry-After"))
+    print("Content-Type:", response.headers.get("Content-Type"))
+    print("Response preview:", response.text[:500])
+
+
     response.raise_for_status()
     
     return response.text
@@ -28,14 +37,25 @@ def fetch_all_it_jobs_pages(
     min_delay: float = 4.0,
     max_delay: float = 6.0,
 ) -> Iterator[str]:
+    
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/150.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+    }
 
     with requests.Session() as session:
+        session.headers.update(headers)
+
         for page in range(1, total_pages + 1):
             params = {
                 "type_keyword": 1,
+                "page": page,
                 "category_family": "r257",
                 "saturday_status": 0,
-                "page": page,
             }
 
             try:

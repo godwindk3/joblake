@@ -1,0 +1,77 @@
+source: topcv
+enabled: true
+
+discovery:
+  # TopCV hiện chặn requests nên tạm dùng playwright.
+  # Có thể đổi thành requests nếu endpoint hoạt động lại.
+  transport: cloakbrowser
+  headless: false
+  timeout_seconds: 60
+
+  user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36
+  locale: vi-VN
+
+  pagination:
+    page_param: page
+    start_page: 1
+    total_pages: 10
+
+  delay:
+    min_seconds: 5
+    max_seconds: 10
+
+  proxy:
+    enabled: false
+    server_env: TOPCV_DISCOVERY_PROXY
+    username_env: TOPCV_PROXY_USERNAME
+    password_env: TOPCV_PROXY_PASSWORD
+
+  targets:
+    - name: information_technology
+      enabled: true
+      base_url: https://www.topcv.vn/tim-viec-lam-cong-nghe-thong-tin-cr257
+      params:
+        type_keyword: 1
+        category_family: r257
+        saturday_status: 0
+
+    # Thay base_url này khi mày có category thứ hai.
+    - name: second_category
+      enabled: false
+      base_url: https://www.topcv.vn/replace-with-second-category
+      params:
+        type_keyword: 1
+        saturday_status: 0
+
+      # Có thể override cấu hình phân trang chung.
+      start_page: 1
+      total_pages: 3
+
+detail:
+  transport: cloakbrowser
+  headless: false
+  timeout_seconds: 60
+
+  user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36
+  locale: vi-VN
+
+  # Để 2 khi test. Đổi thành null khi muốn crawl hết.
+  max_jobs_per_run: null
+
+  delay:
+    min_seconds: 5
+    max_seconds: 10
+
+  proxy:
+    enabled: false
+    server_env: TOPCV_DETAIL_PROXY
+    username_env: TOPCV_PROXY_USERNAME
+    password_env: TOPCV_PROXY_PASSWORD
+
+storage:
+  provider: local
+  raw_directory: data/raw
+
+state:
+  discovered_jobs_file: data/state/discovered_jobs.jsonl
+  crawled_urls_file: data/state/crawled_urls.txt

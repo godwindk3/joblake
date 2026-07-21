@@ -92,7 +92,7 @@ def crawl_detail_pages(
 ) -> Iterator[CrawlResult]:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
-            headless=True,
+            headless=False,
             args=[
                 "--disable-blink-features=AutomationControlled"
             ]
@@ -131,7 +131,7 @@ def crawl_detail_pages(
 
 urls = [
     "https://www.topcv.vn/viec-lam/ui-ux-designer/2228808.html",
-    # "https://www.topcv.vn/viec-lam/system-engineer-crm-du-an-cntt/2184652.html",
+    "https://www.topcv.vn/viec-lam/system-engineer-crm-du-an-cntt/2184652.html",
 ]
 
 def save_to_txt(html: str, filename: str) -> bool:
@@ -156,5 +156,5 @@ def process_crawled_details(urls: list[str]) -> None:
         else:
             print(result.url, result.error)
 
-# process_crawled_details(urls)
+process_crawled_details(urls)
 
