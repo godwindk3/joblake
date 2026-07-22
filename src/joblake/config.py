@@ -20,4 +20,14 @@ def load_config(path: str) -> dict:
     if not config.get("source"):
         raise ValueError("Missing source name")
 
+    source_adapter = config.get("source_adapter")
+
+    if (
+        source_adapter is not None
+        and not isinstance(source_adapter, str)
+    ):
+        raise ValueError(
+            "source_adapter must be a dotted class path"
+        )
+
     return config

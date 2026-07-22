@@ -4,6 +4,7 @@ import re
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
+from typing import Protocol, Self
 
 from joblake.models import (
     DiscoveryRecord,
@@ -73,6 +74,121 @@ def _write_html_and_metadata(
     return str(html_path), str(metadata_path)
 
 
+class RawStorage(Protocol):
+
+    def save_discovery(
+        self,
+        *,
+        source: str,
+        target_name: str,
+        page_number: int,
+        fetch_result: FetchResult,
+    ) -> tuple[str, str]: ...
+
+    def save_detail(
+        self,
+        *,
+        discovery_record: DiscoveryRecord,
+        fetch_result: FetchResult,
+    ) -> tuple[str, str]: ...
+
+
+class LocalRawStorage:
+
+    def __init__(self, raw_directory: str):
+        self.raw_root = Path(raw_directory)
+
+    @classmethod
+    def from_config(cls, config: dict) -> Self:
+        storage_config = config["storage"]
+
+        if storage_config.get("provider", "local") != "local":
+            raise ValueError(
+                "Only local storage is currently supported"
+            )
+
+        return cls(storage_config["raw_directory"])
+
+    def save_discovery(
+        self,
+        *,
+        source: str,
+        target_name: str,
+        page_number: int,
+        fetch_result: FetchResult,
+    ) -> tuple[str, str]:
+        crawl_date, timestamp = _fetch_time_parts(
+            fetch_result.fetched_at
+        )
+
+        directory = (
+            self.raw_root
+            / f"source={_safe_name(source)}"
+            / "entity=discovery"
+            / f"crawl_date={crawl_date}"
+            / f"target={_safe_name(target_name)}"
+        )
+        file_stem = f"page={page_number}_{timestamp}"
+        metadata = {
+            "source": source,
+            "entity_type": "discovery",
+            "target_name": target_name,
+            "listing_page": page_number,
+            "requested_url": fetch_result.requested_url,
+            "final_url": fetch_result.final_url,
+            "status_code": fetch_result.status_code,
+            "content_type": fetch_result.content_type,
+            "fetched_at": fetch_result.fetched_at,
+        }
+
+        return _write_html_and_metadata(
+            html_path=directory / f"{file_stem}.html",
+            metadata_path=(
+                directory / f"{file_stem}.metadata.json"
+            ),
+            html=fetch_result.html,
+            metadata=metadata,
+        )
+
+    def save_detail(
+        self,
+        *,
+        discovery_record: DiscoveryRecord,
+        fetch_result: FetchResult,
+    ) -> tuple[str, str]:
+        crawl_date, timestamp = _fetch_time_parts(
+            fetch_result.fetched_at
+        )
+        url_hash = hashlib.sha256(
+            discovery_record.url.encode("utf-8")
+        ).hexdigest()
+        directory = (
+            self.raw_root
+            / f"source={_safe_name(discovery_record.source)}"
+            / "entity=detail"
+            / f"crawl_date={crawl_date}"
+        )
+        file_stem = f"{url_hash}_{timestamp}"
+        metadata = {
+            **asdict(discovery_record),
+            "entity_type": "detail",
+            "requested_url": fetch_result.requested_url,
+            "final_url": fetch_result.final_url,
+            "status_code": fetch_result.status_code,
+            "content_type": fetch_result.content_type,
+            "fetched_at": fetch_result.fetched_at,
+        }
+
+        return _write_html_and_metadata(
+            html_path=directory / f"{file_stem}.html",
+            metadata_path=(
+                directory / f"{file_stem}.metadata.json"
+            ),
+            html=fetch_result.html,
+            metadata=metadata,
+        )
+
+
 def save_raw_discovery(
     *,
     source: str,
@@ -81,45 +197,14 @@ def save_raw_discovery(
     fetch_result: FetchResult,
     config: dict,
 ) -> tuple[str, str]:
-    raw_root = Path(
-        config["storage"]["raw_directory"]
-    )
-
-    crawl_date, timestamp = _fetch_time_parts(
-        fetch_result.fetched_at
-    )
-
-    directory = (
-        raw_root
-        / f"source={_safe_name(source)}"
-        / "entity=discovery"
-        / f"crawl_date={crawl_date}"
-        / f"target={_safe_name(target_name)}"
-    )
-
-    file_stem = (
-        f"page={page_number}_{timestamp}"
-    )
-
-    metadata = {
-        "source": source,
-        "entity_type": "discovery",
-        "target_name": target_name,
-        "listing_page": page_number,
-        "requested_url": fetch_result.requested_url,
-        "final_url": fetch_result.final_url,
-        "status_code": fetch_result.status_code,
-        "content_type": fetch_result.content_type,
-        "fetched_at": fetch_result.fetched_at,
-    }
-
-    return _write_html_and_metadata(
-        html_path=directory / f"{file_stem}.html",
-        metadata_path=(
-            directory / f"{file_stem}.metadata.json"
-        ),
-        html=fetch_result.html,
-        metadata=metadata,
+    """Backward-compatible functional API."""
+    return LocalRawStorage.from_config(
+        config
+    ).save_discovery(
+        source=source,
+        target_name=target_name,
+        page_number=page_number,
+        fetch_result=fetch_result,
     )
 
 
@@ -129,42 +214,10 @@ def save_raw_detail(
     fetch_result: FetchResult,
     config: dict,
 ) -> tuple[str, str]:
-    raw_root = Path(
-        config["storage"]["raw_directory"]
-    )
-
-    crawl_date, timestamp = _fetch_time_parts(
-        fetch_result.fetched_at
-    )
-
-    url_hash = hashlib.sha256(
-        discovery_record.url.encode("utf-8")
-    ).hexdigest()
-
-    directory = (
-        raw_root
-        / f"source={_safe_name(discovery_record.source)}"
-        / "entity=detail"
-        / f"crawl_date={crawl_date}"
-    )
-
-    file_stem = f"{url_hash}_{timestamp}"
-
-    metadata = {
-        **asdict(discovery_record),
-        "entity_type": "detail",
-        "requested_url": fetch_result.requested_url,
-        "final_url": fetch_result.final_url,
-        "status_code": fetch_result.status_code,
-        "content_type": fetch_result.content_type,
-        "fetched_at": fetch_result.fetched_at,
-    }
-
-    return _write_html_and_metadata(
-        html_path=directory / f"{file_stem}.html",
-        metadata_path=(
-            directory / f"{file_stem}.metadata.json"
-        ),
-        html=fetch_result.html,
-        metadata=metadata,
+    """Backward-compatible functional API."""
+    return LocalRawStorage.from_config(
+        config
+    ).save_detail(
+        discovery_record=discovery_record,
+        fetch_result=fetch_result,
     )

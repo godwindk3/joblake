@@ -1,20 +1,36 @@
 source: topcv
+source_adapter: joblake.sources.topcv.TopCVSource
 enabled: true
 
 discovery:
-  # TopCV hiện chặn requests nên tạm dùng playwright.
+  # TopCV hiện chặn requests nên tạm dùng CloakBrowser.
   # Có thể đổi thành requests nếu endpoint hoạt động lại.
   transport: cloakbrowser
   headless: false
   timeout_seconds: 60
 
-  user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36
+  humanize: true
+  geoip: true
   locale: vi-VN
+  timezone_id: Asia/Ho_Chi_Minh
+  storage_state_path: data/state/topcv_browser_state.json
+  ready_selector: "script[type='application/ld+json']"
+  ready_timeout_seconds: 30
+
+  settle_seconds:
+    min: 1.5
+    max: 4
+
+  retry:
+    max_attempts: 3
+    base_delay_seconds: 10
+    max_delay_seconds: 60
 
   pagination:
     page_param: page
     start_page: 1
-    total_pages: 10
+    # Bỏ total_pages để tự đọc trang cuối từ HTML TopCV.
+    max_auto_pages: 200
 
   delay:
     min_seconds: 5
@@ -52,18 +68,32 @@ detail:
   headless: false
   timeout_seconds: 60
 
-  user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36
+  humanize: true
+  geoip: true
   locale: vi-VN
+  timezone_id: Asia/Ho_Chi_Minh
+  storage_state_path: data/state/topcv_browser_state.json
+  ready_selector: h1
+  ready_timeout_seconds: 30
+
+  settle_seconds:
+    min: 1.5
+    max: 4
+
+  retry:
+    max_attempts: 3
+    base_delay_seconds: 10
+    max_delay_seconds: 60
 
   # Để 2 khi test. Đổi thành null khi muốn crawl hết.
   max_jobs_per_run: null
 
   delay:
-    min_seconds: 5
-    max_seconds: 10
+    min_seconds: 15
+    max_seconds: 35
 
   proxy:
-    enabled: false
+    enabled: true
     server_env: TOPCV_DETAIL_PROXY
     username_env: TOPCV_PROXY_USERNAME
     password_env: TOPCV_PROXY_PASSWORD

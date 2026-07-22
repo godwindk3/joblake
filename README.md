@@ -1,5 +1,8 @@
 # joblake
 
+Website-specific crawling is implemented through source adapters. See
+[Adding a job source](docs/adding-source.md) for the extension workflow.
+
 `` 
 System design:
 + 01 Product Requirements

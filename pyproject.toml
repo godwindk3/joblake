@@ -11,7 +11,8 @@ dependencies = [
     "playwright",
     "PyYAML",
     "requests",
-    "cloakbrowser ",
+    "cloakbrowser[geoip]",
+    "python-dotenv",
 ]
 
 [tool.setuptools.packages.find]

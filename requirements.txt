@@ -2,4 +2,6 @@ beautifulsoup4==4.15.0
 pydantic==2.13.4
 requests==2.34.2
 playwright==1.60.0
-cloakbrowser 
+PyYAML
+python-dotenv
+cloakbrowser[geoip]

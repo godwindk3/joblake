@@ -1,9 +1,19 @@
 import argparse
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from joblake.pipeline import run_pipeline
 
 
 def main() -> None:
+    project_root = Path(__file__).resolve().parents[2]
+
+    load_dotenv(
+        dotenv_path=project_root / ".env",
+        override=False,
+    )
+
     parser = argparse.ArgumentParser(
         description="Run JobLake ingestion pipeline"
     )

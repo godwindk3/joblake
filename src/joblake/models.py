@@ -27,3 +27,7 @@ class FetchError(Exception):
 
 class SourceBlockedError(FetchError):
     """Nguồn trả về Cloudflare challenge hoặc chặn crawler."""
+
+
+class PaginationDetectionError(Exception):
+    """Không thể xác định trang cuối khi bật auto-pagination."""
