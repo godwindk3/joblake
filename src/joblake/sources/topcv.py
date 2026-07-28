@@ -2,7 +2,7 @@ import json
 import re
 from html.parser import HTMLParser
 from typing import Iterator
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from joblake.sources.base import JobSource
 
@@ -109,6 +109,9 @@ def _walk_json(value) -> Iterator[dict]:
 class TopCVSource(JobSource):
     """TopCV discovery based on JSON-LD ItemList records."""
 
+    detail_validation_version = "topcv-detail-v1"
+    detail_path_prefixes = ("/viec-lam/",)
+
     def extract_job_urls(
         self,
         html: str,
@@ -148,7 +151,11 @@ class TopCVSource(JobSource):
                     )
 
                     if self._is_job_url(absolute_url):
-                        urls.append(absolute_url)
+                        urls.append(
+                            self.normalize_job_url(
+                                absolute_url
+                            )
+                        )
 
         return list(dict.fromkeys(urls))
 
@@ -177,6 +184,18 @@ class TopCVSource(JobSource):
 
         page_number = int(match.group(1))
         return page_number if page_number >= 1 else None
+
+    def normalize_job_url(self, url: str) -> str:
+        parts = urlsplit(url)
+        return urlunsplit(
+            (
+                parts.scheme,
+                parts.netloc,
+                parts.path,
+                "",
+                "",
+            )
+        )
 
     @staticmethod
     def _element_url(element) -> str | None:

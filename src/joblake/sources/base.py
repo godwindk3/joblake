@@ -2,7 +2,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterator
 
-from joblake.models import DiscoveryRecord
+from joblake.models import (
+    DiscoveryRecord,
+    FetchResult,
+    ValidationResult,
+)
+from joblake.validation import validate_detail_html
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +27,9 @@ class DetailRequest:
 
 class JobSource(ABC):
     """Website-specific behavior used by the generic pipeline."""
+
+    detail_validation_version = "generic-detail-v1"
+    detail_path_prefixes: tuple[str, ...] = ()
 
     def __init__(self, config: dict):
         self.config = config
@@ -107,6 +115,10 @@ class JobSource(ABC):
         """Return the absolute last page number, or None if unknown."""
         return None
 
+    def normalize_job_url(self, url: str) -> str:
+        """Return the stable URL identity stored in SQLite."""
+        return url
+
     def build_detail_request(
         self,
         record: DiscoveryRecord,
@@ -114,4 +126,25 @@ class JobSource(ABC):
         return DetailRequest(
             url=record.url,
             referer=record.listing_url,
+        )
+
+    def validate_detail_html(
+        self,
+        fetch_result: FetchResult,
+        detail_url: str,
+    ) -> ValidationResult:
+        return validate_detail_html(
+            fetch_result=fetch_result,
+            detail_url=detail_url,
+            validation_config=(
+                self.config
+                .get("detail", {})
+                .get("validation", {})
+            ),
+            validation_version=(
+                self.detail_validation_version
+            ),
+            required_path_prefixes=(
+                self.detail_path_prefixes
+            ),
         )

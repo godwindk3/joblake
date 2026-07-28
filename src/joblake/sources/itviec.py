@@ -1,5 +1,10 @@
 from html.parser import HTMLParser
-from urllib.parse import parse_qs, urljoin, urlsplit
+from urllib.parse import (
+    parse_qs,
+    urljoin,
+    urlsplit,
+    urlunsplit,
+)
 
 from joblake.sources.base import JobSource
 
@@ -126,6 +131,9 @@ class _ITviecPaginationParser(HTMLParser):
 class ITviecSource(JobSource):
     """ITviec discovery based on job-title data attributes."""
 
+    detail_validation_version = "itviec-detail-v1"
+    detail_path_prefixes = ("/it-jobs/",)
+
     def extract_job_urls(
         self,
         html: str,
@@ -144,7 +152,11 @@ class ITviecSource(JobSource):
             )
 
             if self._is_job_url(absolute_url):
-                urls.append(absolute_url)
+                urls.append(
+                    self.normalize_job_url(
+                        absolute_url
+                    )
+                )
 
         return list(dict.fromkeys(urls))
 
@@ -161,6 +173,18 @@ class ITviecSource(JobSource):
             return None
 
         return max(parser.page_numbers)
+
+    def normalize_job_url(self, url: str) -> str:
+        parts = urlsplit(url)
+        return urlunsplit(
+            (
+                parts.scheme,
+                parts.netloc,
+                parts.path,
+                "",
+                "",
+            )
+        )
 
     @staticmethod
     def _is_job_url(url: str) -> bool:

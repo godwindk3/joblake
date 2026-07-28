@@ -112,5 +112,11 @@ Override `build_listing_request()` when pagination is encoded in the URL
 path or requires custom parameters. Override `build_detail_request()` when
 detail pages need different parameters or a custom referrer.
 
+Detail responses use the generic validation rules under
+`detail.validation`. Override `validate_detail_html()` in the adapter
+when a source needs stronger identity or completeness checks. Only a
+validated response is accepted into `raw_objects` and prevents that URL
+from being fetched again.
+
 No changes to `discovery.py`, `pipeline.py`, storage, or state management
 are required when adding another adapter.

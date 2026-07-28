@@ -23,10 +23,19 @@ def main() -> None:
         default="configs/topcv.yaml",
         help="Path to source configuration file",
     )
+    parser.add_argument(
+        "--phase",
+        choices=("full", "discovery", "detail"),
+        default="full",
+        help=(
+            "Run both phases, discovery only, "
+            "or detail only"
+        ),
+    )
 
     args = parser.parse_args()
 
-    run_pipeline(args.config)
+    run_pipeline(args.config, phase=args.phase)
 
 
 if __name__ == "__main__":

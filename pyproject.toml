@@ -13,6 +13,7 @@ dependencies = [
     "requests",
     "cloakbrowser[geoip]",
     "python-dotenv",
+    "minio",
 ]
 
 [tool.setuptools.packages.find]

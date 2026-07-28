@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from joblake.discovery import DiscoveryCrawler
 from joblake.models import (
+    FetchError,
     FetchResult,
     PaginationDetectionError,
 )
@@ -52,6 +53,21 @@ class FakeFetcher:
             content_type="text/html",
             fetched_at="2026-01-01T00:00:00+00:00",
             html="<html></html>",
+        )
+
+
+class MissingTargetFetcher(FakeFetcher):
+
+    def fetch(self, url, params=None, **kwargs):
+        if url.endswith("/others"):
+            raise FetchError(
+                f"HTTP status 404: {url}"
+            )
+
+        return super().fetch(
+            url,
+            params=params,
+            **kwargs,
         )
 
 
@@ -190,6 +206,59 @@ class DiscoveryCrawlerTests(unittest.TestCase):
         with self.assertRaises(PaginationDetectionError):
             crawler.run()
 
+        self.assertEqual(sleep.call_count, 1)
+
+    @patch("joblake.discovery.time.sleep")
+    def test_continues_after_one_target_returns_404(
+        self,
+        sleep,
+    ) -> None:
+        config = {
+            "source": "fake",
+            "discovery": {
+                "continue_on_target_error": True,
+                "pagination": {
+                    "page_param": "page",
+                    "start_page": 1,
+                    "total_pages": 1,
+                },
+                "delay": {
+                    "min_seconds": 0,
+                    "max_seconds": 0,
+                },
+                "targets": [
+                    {
+                        "name": "engineering",
+                        "base_url": (
+                            "https://example.com/jobs"
+                        ),
+                    },
+                    {
+                        "name": "others",
+                        "base_url": (
+                            "https://example.com/others"
+                        ),
+                    },
+                ],
+            },
+        }
+        storage = FakeStorage()
+        crawler = DiscoveryCrawler(
+            config=config,
+            source=FakeSource(config),
+            storage=storage,
+            fetcher_factory=(
+                lambda _: MissingTargetFetcher()
+            ),
+        )
+
+        records = crawler.run()
+
+        self.assertEqual(len(records), 2)
+        self.assertEqual(len(storage.pages), 1)
+        self.assertTrue(crawler.has_failed_targets)
+        self.assertEqual(len(crawler.target_errors), 1)
+        self.assertIn("others", crawler.target_errors[0])
         self.assertEqual(sleep.call_count, 1)
 
 

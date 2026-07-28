@@ -172,8 +172,7 @@ class ITviecSourceTests(unittest.TestCase):
             urls,
             [
                 "https://itviec.com/it-jobs/"
-                "data-engineer-5541?"
-                "lab_feature=preview_jd_page"
+                "data-engineer-5541"
             ],
         )
 

@@ -3,6 +3,11 @@
 Website-specific crawling is implemented through source adapters. See
 [Adding a job source](docs/adding-source.md) for the extension workflow.
 
+Raw detail HTML is stored in MinIO and crawl state is stored in SQLite.
+See [MinIO raw storage and SQLite state](docs/storage-state.md) for the
+runtime configuration, state model, validation flow, and future parser
+query.
+
 `` 
 System design:
 + 01 Product Requirements
