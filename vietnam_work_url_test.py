@@ -4,6 +4,8 @@ from cloakbrowser import launch
 
 
 URL = "https://www.vietnamworks.com/viec-lam?g=5"
+URL_PAGE_2 = "https://www.vietnamworks.com/viec-lam?g=5&page=2"
+
 SELECTORS = [
     "a.img_job_card[href]",
     'h2 a[href*="-jv"]',

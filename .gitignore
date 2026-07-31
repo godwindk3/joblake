@@ -226,3 +226,5 @@ data/raw/
 data/state/
 
 .pytest_cache/
+
+cloak_test_output/
