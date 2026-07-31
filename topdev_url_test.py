@@ -4,6 +4,7 @@ from cloakbrowser import launch
 
 
 URL = "https://topdev.vn/jobs/search?job_categories_ids=2%2C3%2C4%2C5%2C6%2C7%2C8%2C9%2C10%2C11%2C12%2C13%2C67"
+URL_PAGE_2 = "https://topdev.vn/jobs/search?job_categories_ids=2%2C3%2C4%2C5%2C6%2C7%2C8%2C9%2C10%2C11%2C12%2C13%2C67&page=2"
 SELECTOR = 'a[href^="/detail-jobs/"]'
 
 browser = launch(headless=False)

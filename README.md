@@ -8,6 +8,20 @@ See [MinIO raw storage and SQLite state](docs/storage-state.md) for the
 runtime configuration, state model, validation flow, and future parser
 query.
 
+Available source configs:
+
+- `configs/topcv.yaml`
+- `configs/itviec.yaml`
+- `configs/topdev.yaml`
+- `configs/vietnamworks.yaml`
+
+Run a complete source pipeline with:
+
+```powershell
+python -m joblake.main --config configs/topdev.yaml
+python -m joblake.main --config configs/vietnamworks.yaml
+```
+
 `` 
 System design:
 + 01 Product Requirements

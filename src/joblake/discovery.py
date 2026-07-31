@@ -36,6 +36,8 @@ class _TargetProgress:
     duplicate_url_count: int = 0
     empty_page_count: int = 0
     invalid_page_count: int = 0
+    stopped_by_content_rule: bool = False
+    reached_page_limit: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,8 +183,12 @@ class DiscoveryCrawler:
         status = "completed"
 
         if (
-            progress.empty_page_count > 0
+            (
+                progress.empty_page_count > 0
+                and not progress.stopped_by_content_rule
+            )
             or progress.discovered_url_count == 0
+            or progress.reached_page_limit
         ):
             status = "suspicious"
             self.has_suspicious_targets = True
@@ -281,6 +287,29 @@ class DiscoveryCrawler:
 
             return
 
+        strategy = pagination.get(
+            "strategy",
+            "detect_last_page",
+        )
+
+        if strategy == "until_empty":
+            self._crawl_until_empty(
+                target=target,
+                discovery_config=discovery_config,
+                fetcher=fetcher,
+                discovered_jobs=discovered_jobs,
+                progress=progress,
+                start_page=start_page,
+                delay=delay,
+            )
+            return
+
+        if strategy != "detect_last_page":
+            raise ValueError(
+                "pagination.strategy must be "
+                "detect_last_page or until_empty"
+            )
+
         first_request = self.source.build_listing_request(
             target,
             discovery_config,
@@ -349,6 +378,142 @@ class DiscoveryCrawler:
                 discovered_jobs=discovered_jobs,
                 progress=progress,
             )
+
+    def _crawl_until_empty(
+        self,
+        *,
+        target: dict,
+        discovery_config: dict,
+        fetcher,
+        discovered_jobs: dict[str, DiscoveryRecord],
+        progress: _TargetProgress,
+        start_page: int,
+        delay: dict,
+    ) -> None:
+        pagination = discovery_config["pagination"]
+        max_auto_pages = int(
+            pagination.get("max_auto_pages", 200)
+        )
+        stop_after_empty_pages = int(
+            pagination.get(
+                "stop_after_empty_pages",
+                1,
+            )
+        )
+        raw_stale_limit = pagination.get(
+            "stop_after_stale_pages",
+            2,
+        )
+        stop_after_stale_pages = (
+            int(raw_stale_limit)
+            if raw_stale_limit is not None
+            else None
+        )
+
+        if max_auto_pages < 1:
+            raise ValueError(
+                "pagination.max_auto_pages must "
+                "be at least 1"
+            )
+
+        if stop_after_empty_pages < 1:
+            raise ValueError(
+                "pagination.stop_after_empty_pages "
+                "must be at least 1"
+            )
+
+        if (
+            stop_after_stale_pages is not None
+            and stop_after_stale_pages < 1
+        ):
+            raise ValueError(
+                "pagination.stop_after_stale_pages "
+                "must be at least 1 or null"
+            )
+
+        consecutive_empty_pages = 0
+        consecutive_stale_pages = 0
+        last_useful_page: int | None = None
+
+        print(
+            f"Target={target['name']}, auto-pagination: "
+            "strategy=until_empty, "
+            f"max_pages={max_auto_pages}"
+        )
+
+        for page_number in range(
+            start_page,
+            start_page + max_auto_pages,
+        ):
+            previous_count = len(discovered_jobs)
+            request = self.source.build_listing_request(
+                target,
+                discovery_config,
+                page_number,
+            )
+            result = self._crawl_listing_request(
+                request=request,
+                fetcher=fetcher,
+                delay=delay,
+                discovered_jobs=discovered_jobs,
+                progress=progress,
+            )
+            in_run_new_count = (
+                len(discovered_jobs) - previous_count
+            )
+
+            if not result.page_urls:
+                consecutive_empty_pages += 1
+                consecutive_stale_pages = 0
+            else:
+                consecutive_empty_pages = 0
+
+                if in_run_new_count:
+                    consecutive_stale_pages = 0
+                    last_useful_page = page_number
+                else:
+                    consecutive_stale_pages += 1
+
+            if (
+                consecutive_empty_pages
+                >= stop_after_empty_pages
+            ):
+                progress.stopped_by_content_rule = True
+                progress.detected_last_page = (
+                    last_useful_page
+                )
+                print(
+                    f"Target={target['name']}, stopped "
+                    f"after {consecutive_empty_pages} "
+                    "empty page(s); "
+                    f"last_useful_page={last_useful_page}"
+                )
+                return
+
+            if (
+                stop_after_stale_pages is not None
+                and consecutive_stale_pages
+                >= stop_after_stale_pages
+            ):
+                progress.stopped_by_content_rule = True
+                progress.detected_last_page = (
+                    last_useful_page
+                )
+                print(
+                    f"Target={target['name']}, stopped "
+                    f"after {consecutive_stale_pages} "
+                    "page(s) without new URLs; "
+                    f"last_useful_page={last_useful_page}"
+                )
+                return
+
+        progress.detected_last_page = last_useful_page
+        progress.reached_page_limit = True
+        print(
+            f"Target={target['name']}, reached "
+            f"max_auto_pages={max_auto_pages} "
+            "without a terminal page"
+        )
 
     def _crawl_listing_request(
         self,

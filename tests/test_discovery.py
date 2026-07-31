@@ -35,6 +35,22 @@ class AutoPaginationSource(FakeSource):
         return 3
 
 
+class UntilEmptySource(FakeSource):
+
+    def extract_job_urls(
+        self,
+        html: str,
+        listing_url: str,
+    ) -> list[str]:
+        if listing_url.endswith("page=3"):
+            return []
+
+        return super().extract_job_urls(
+            html,
+            listing_url,
+        )
+
+
 class FakeFetcher:
 
     def __enter__(self):
@@ -260,6 +276,58 @@ class DiscoveryCrawlerTests(unittest.TestCase):
         self.assertEqual(len(crawler.target_errors), 1)
         self.assertIn("others", crawler.target_errors[0])
         self.assertEqual(sleep.call_count, 1)
+
+    @patch("joblake.discovery.time.sleep")
+    def test_until_empty_stops_after_first_empty_page(
+        self,
+        sleep,
+    ) -> None:
+        config = {
+            "source": "fake",
+            "discovery": {
+                "pagination": {
+                    "page_param": "page",
+                    "start_page": 1,
+                    "strategy": "until_empty",
+                    "max_auto_pages": 10,
+                    "stop_after_empty_pages": 1,
+                    "stop_after_stale_pages": 2,
+                },
+                "delay": {
+                    "min_seconds": 0,
+                    "max_seconds": 0,
+                },
+                "targets": [{
+                    "name": "engineering",
+                    "base_url": (
+                        "https://example.com/jobs"
+                    ),
+                }],
+            },
+        }
+        storage = FakeStorage()
+        crawler = DiscoveryCrawler(
+            config=config,
+            source=UntilEmptySource(config),
+            storage=storage,
+            fetcher_factory=lambda _: FakeFetcher(),
+        )
+
+        records = crawler.run()
+
+        self.assertEqual(len(storage.pages), 3)
+        self.assertEqual(
+            [
+                page["page_number"]
+                for page in storage.pages
+            ],
+            [1, 2, 3],
+        )
+        self.assertEqual(len(records), 3)
+        self.assertFalse(
+            crawler.has_suspicious_targets
+        )
+        self.assertEqual(sleep.call_count, 3)
 
 
 if __name__ == "__main__":

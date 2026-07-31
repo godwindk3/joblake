@@ -27,6 +27,9 @@ from playwright.sync_api import sync_playwright
 from joblake.block_detection import (
     detect_block_reason as _detect_block_reason,
 )
+from joblake.browser_actions import (
+    run_browser_actions as _run_browser_actions,
+)
 from joblake.models import (
     FetchError,
     FetchResult,
@@ -505,6 +508,7 @@ def _fetch_browser_page(
                 )
 
             _settle_page(page, config)
+            _run_browser_actions(page, config)
 
             html = page.content()
             block_reason = _detect_block_reason(

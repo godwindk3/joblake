@@ -4,6 +4,10 @@ from joblake.models import DiscoveryRecord
 from joblake.sources.factory import create_source
 from joblake.sources.itviec import ITviecSource
 from joblake.sources.topcv import TopCVSource
+from joblake.sources.topdev import TopDevSource
+from joblake.sources.vietnamworks import (
+    VietnamWorksSource,
+)
 
 
 class TopCVSourceTests(unittest.TestCase):
@@ -239,6 +243,160 @@ class ITviecSourceTests(unittest.TestCase):
         source = create_source({"source": "itviec"})
 
         self.assertIsInstance(source, ITviecSource)
+
+
+class TopDevSourceTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.source = TopDevSource({
+            "source": "topdev"
+        })
+
+    def test_extracts_and_normalizes_job_urls(self) -> None:
+        html = """
+        <a href="/detail-jobs/backend-engineer-123?src=search">
+          Backend Engineer
+        </a>
+        <a href="/detail-jobs/backend-engineer-123?duplicate=1">
+          Duplicate
+        </a>
+        <a href="https://evil.example/detail-jobs/fake-9">
+          Ignore external host
+        </a>
+        <a href="/companies/example">Ignore company</a>
+        """
+
+        urls = self.source.extract_job_urls(
+            html,
+            "https://topdev.vn/jobs/search?page=1",
+        )
+
+        self.assertEqual(
+            urls,
+            [
+                "https://topdev.vn/detail-jobs/"
+                "backend-engineer-123"
+            ],
+        )
+
+    def test_extracts_last_numeric_pagination_button(
+        self,
+    ) -> None:
+        html = """
+        <nav>
+          <a class="rounded-md h-8 w-8 cursor-pointer">1</a>
+          <a class="rounded-md h-8 w-8 cursor-pointer">2</a>
+          <span>More pages</span>
+          <a class="rounded-md h-8 w-8 cursor-pointer">
+            11
+          </a>
+          <a aria-label="Go to next page">
+            <span>Next</span>
+          </a>
+        </nav>
+        """
+
+        last_page = self.source.extract_last_page_number(
+            html,
+            "https://topdev.vn/jobs/search?page=1",
+        )
+
+        self.assertEqual(last_page, 11)
+
+    def test_extracts_page_number_from_aria_label(
+        self,
+    ) -> None:
+        html = """
+        <a aria-label="Go to page 12">Last</a>
+        """
+
+        self.assertEqual(
+            self.source.extract_last_page_number(
+                html,
+                "https://topdev.vn/jobs/search?page=1",
+            ),
+            12,
+        )
+
+    def test_factory_loads_topdev_adapter(self) -> None:
+        source = create_source({"source": "topdev"})
+
+        self.assertIsInstance(source, TopDevSource)
+
+
+class VietnamWorksSourceTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.source = VietnamWorksSource({
+            "source": "vietnamworks"
+        })
+
+    def test_extracts_both_job_link_variants(
+        self,
+    ) -> None:
+        html = """
+        <a class="img_job_card"
+           href="/ai-engineer-2085611-jv?source=search">
+          Image
+        </a>
+        <h2>
+          <a href="/backend-engineer-2085612-jv">
+            Backend Engineer
+          </a>
+        </h2>
+        <a href="/backend-engineer-2085612-jv">
+          Duplicate
+        </a>
+        <a href="https://evil.example/fake-2085613-jv">
+          Ignore external host
+        </a>
+        """
+
+        urls = self.source.extract_job_urls(
+            html,
+            (
+                "https://www.vietnamworks.com/"
+                "viec-lam?g=5&page=1"
+            ),
+        )
+
+        self.assertEqual(
+            urls,
+            [
+                "https://www.vietnamworks.com/"
+                "ai-engineer-2085611-jv",
+                "https://www.vietnamworks.com/"
+                "backend-engineer-2085612-jv",
+            ],
+        )
+
+    def test_rejects_non_job_links(self) -> None:
+        html = """
+        <a class="img_job_card" href="/company/example">
+          Company
+        </a>
+        <a href="/viec-lam">Listing</a>
+        """
+
+        self.assertEqual(
+            self.source.extract_job_urls(
+                html,
+                "https://www.vietnamworks.com/viec-lam",
+            ),
+            [],
+        )
+
+    def test_factory_loads_vietnamworks_adapter(
+        self,
+    ) -> None:
+        source = create_source({
+            "source": "vietnamworks"
+        })
+
+        self.assertIsInstance(
+            source,
+            VietnamWorksSource,
+        )
 
 
 if __name__ == "__main__":
