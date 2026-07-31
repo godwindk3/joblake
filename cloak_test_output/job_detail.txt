@@ -1,0 +1,308 @@
+Tất cả danh mục
+Dành cho Nhà tuyển dụng
+Vi
+Tải Upzi ngay
+Để xem nhiều việc làm cho Intern, Fresher và người dưới 3 năm kinh nghiệm
+AI Engineer (Agentic AI)
+Thương lượng
+Mức lương phổ biến trên thị trường là bao nhiêu?
+Hết hạn trong 22 ngày
+1041 lượt xem
+Hà Nội, Hồ Chí Minh
+Nộp đơn
+Lưu công việc này
+Mô tả công việc
+
+Mô tả công việc
+
+• Nghiên cứu, thiết kế và phát triển các nền tảng, sản phẩm AI ứng dụng trong lĩnh vực bất động sản và mô hình kinh doanh O2O.
+
+• Xây dựng các hệ thống Agentic AI, AI Assistant và AI Agent có khả năng lập kế hoạch, suy luận, sử dụng công cụ và tự động thực hiện các quy trình nghiệp vụ.
+
+• Phát triển các ứng dụng sử dụng LLMs, RAG, Semantic Search, Knowledge Base và hệ thống hỏi đáp thông minh.
+
+• Thiết kế kiến trúc multi-agent, agent workflow, memory, tool calling và cơ chế phối hợp giữa các AI Agent.
+
+• Tích hợp các mô hình AI/LLM với hệ thống nội bộ, dữ liệu doanh nghiệp, API và các nền tảng nghiệp vụ bất động sản.
+
+• Xây dựng, triển khai và tối ưu các AI service sử dụng Python, FastAPI, Flask hoặc các framework tương đương.
+
+• Đánh giá chất lượng mô hình và hệ thống AI thông qua các tiêu chí về độ chính xác, mức độ liên quan, độ trễ, chi phí và trải nghiệm người dùng.
+
+• Theo dõi, tối ưu và xử lý các vấn đề của hệ thống AI trong môi trường production.
+
+• Phối hợp với Product Owner, Business Analyst, Data Engineer và các bộ phận nghiệp vụ để phân tích yêu cầu và đưa giải pháp AI vào sản phẩm thực tế.
+
+• Cập nhật, thử nghiệm và đề xuất các công nghệ mới trong lĩnh vực Generative AI, Agentic AI và AI Automation.
+
+Yêu cầu công việc
+Mức độ phù hợp và xếp hạng của bạn so với ứng viên khác như thế nào?
+
+• Tốt nghiệp đại học chuyên ngành Công nghệ Thông tin, Khoa học Máy tính, Trí tuệ Nhân tạo, Khoa học Dữ liệu hoặc lĩnh vực liên quan.
+
+• Có từ 4 năm kinh nghiệm trong AI Engineering, Machine Learning, NLP, Generative AI hoặc phát triển sản phẩm AI.
+
+• Thành thạo Python và có kinh nghiệm xây dựng AI service với FastAPI, Flask hoặc Django.
+
+• Có kinh nghiệm thực tế với LLM, Prompt Engineering, RAG, Embedding, Vector Database và Semantic Search.
+
+• Có kinh nghiệm sử dụng một hoặc nhiều framework như LangChain, LangGraph, LlamaIndex, Semantic Kernel hoặc tương đương.
+
+• Có kinh nghiệm làm việc với các mô hình và nền tảng như OpenAI, Claude, Gemini hoặc các mô hình mã nguồn mở.
+
+• Hiểu về kiến trúc AI Agent, multi-agent system, tool calling, memory, planning và orchestration.
+
+• Có kiến thức về Machine Learning, Deep Learning, NLP và quy trình phát triển, đánh giá, triển khai mô hình AI.
+
+• Có kinh nghiệm làm việc với API, Microservices, Docker, Git, Linux và CI/CD.
+
+• Có khả năng thiết kế hệ thống, giải quyết vấn đề và chuyển đổi yêu cầu nghiệp vụ thành giải pháp AI có thể triển khai.
+
+• Có khả năng đọc hiểu tài liệu kỹ thuật bằng tiếng Anh.
+
+Ưu tiên
+
+• Có kinh nghiệm xây dựng và vận hành hệ thống Agentic AI hoặc Generative AI trên môi trường production.
+
+• Có kinh nghiệm với Vector Database như Milvus, Qdrant, Weaviate, Pinecone, Elasticsearch hoặc PostgreSQL/pgvector.
+
+• Có kinh nghiệm triển khai hệ thống AI trên AWS, Azure hoặc Google Cloud.
+
+• Hiểu về LLM evaluation, guardrails, observability, hallucination mitigation và tối ưu chi phí sử dụng mô hình.
+
+• Có kinh nghiệm với workflow automation như n8n, Airflow hoặc các nền tảng orchestration tương đương.
+
+• Có kinh nghiệm về Recommendation System, Search, OCR, Document AI hoặc xử lý dữ liệu bất động sản.
+
+• Có kinh nghiệm phát triển sản phẩm AI phục vụ bán hàng, chăm sóc khách hàng, vận hành hoặc tự động hóa quy trình nghiệp vụ.
+
+• Có tư duy sản phẩm, chủ động nghiên cứu công nghệ mới và khả năng làm việc trong môi trường phát triển nhanh.
+
+Các phúc lợi dành cho bạn
+
+Nghỉ phép có lương
+
+12 ngày nghỉ phép năm, nghỉ các ngày lễ, Tết theo quy định của pháp luật.
+
+Hoạt động nhóm
+
+Tham gia các hoạt động nội bộ, hoạt động teambuilding, sự kiện hàng năm của Công ty.
+
+Khác
+
+Mức thu nhập cạnh tranh so với thị trường. Phụ cấp ăn trưa. Được hưởng chế độ ưu đãi khi sử dụng các dịch vụ thuộc hệ sinh thái Tập đoàn: Ưu đãi học phí (Vinschool), khám chữa bệnh (Vinmec), nghỉ dưỡng (Vinpearl), mua xe (VinFast), thuê hoặc/và mua n
+Thông tin việc làm
+NGÀY ĐĂNG
+
+23/07/2026
+
+CẤP BẬC
+
+Nhân viên
+
+NGÀNH NGHỀ
+
+Công Nghệ Thông Tin/Viễn Thông > Data Engineer/Data Analyst/AI
+
+KỸ NĂNG
+
+Ai Engineering, Machine Learning, Nlp, Problem Solving, Python
+
+LĨNH VỰC
+
+Phần Mềm CNTT/Dịch vụ Phần mềm
+
+NGÔN NGỮ TRÌNH BÀY HỒ SƠ
+
+Bất kỳ
+
+SỐ NĂM KINH NGHIỆM TỐI THIỂU
+
+4
+
+QUỐC TỊCH
+
+Không giới hạn
+
+TRÌNH ĐỘ HỌC VẤN TỐI THIỂU
+
+Cử nhân
+
+GIỚI TÍNH
+
+Bất kỳ
+
+ĐỘ TUỔI MONG MUỐN
+
+22-100
+
+TÌNH TRẠNG HÔN NHÂN
+
+Bất kỳ
+
+SỐ LƯỢNG TUYỂN DỤNG
+
+5
+
+NGÀY LÀM VIỆC
+
+T2 - T6
+
+GIỜ LÀM VIỆC
+
+08:30 - 17:30
+
+LOẠI HÌNH LÀM VIỆC
+
+Toàn thời gian
+
+Địa điểm làm việc
+
+TÒA TECHNOPARK, HÀ NỘI
+
+VP Đồng Khởi, 72 Lê Thánh Tôn, Phường Sài Gòn, Hồ Chí Minh
+
+Từ khoá:
+Công Nghệ Thông Tin/Viễn Thông
+Data Engineer/Data Analyst/AI
+Phần Mềm CNTT/Dịch vụ Phần mềm
+Ai Engineering
+Machine Learning
+Nlp
+Problem Solving
+Python
+CÔNG TY CỔ PHẦN VINSMART FUTURE
+Hà Nội
+Hồ Chí Minh
+Trang ChủViệc LàmPhần Mềm CNTT/Dịch Vụ Phần MềmCÔNG TY CỔ PHẦN VINSMART FUTUREAI Engineer (Agentic AI)
+CÔNG TY CỔ PHẦN VINSMART FUTURE
+
+TechnoPark Tower, Vinhomes Ocean Park, Đa Tốn, Gia Lâm, Hanoi, Việt Nam
+
+(Xem bản đồ)
+Manh Tran
+
+NHẬN DIỆN MỘT SỐ HÌNH THỨC LỪA ĐẢO
+
+Giả dạng công ty lớn, uy tín
+
+Đăng tin mạo danh các tập đoàn quy mô lớn, gửi thông tin trực tiếp qua tin nhắn riêng cho người tìm việc.
+
+Xem chi tiết
+
+Tham gia thực hiện nhiệm vụ
+
+Yêu cầu ứng viên tham gia khảo sát/thử việc hoặc làm nhiệm vụ bằng cách cài đặt các ứng dụng điện thoại.
+
+Xem chi tiết
+
+Lừa đảo thu phí
+
+Đưa ra lời mời làm việc dễ dàng bất thường, đãi ngộ cao, kèm theo yêu cầu nộp các loại phí.
+
+Xem chi tiết
+
+Đánh cắp thông tin ngân hàng
+
+Yêu cầu cung cấp thông tin tài khoản ngân hàng, mật khẩu, thẻ thanh toán, mã OTP.
+
+Xem chi tiết
+
+Đánh cắp danh tính
+
+Yêu cầu cung cấp bản Scan, chụp Giấy tờ tuỳ thân, mật khẩu Email để sử dụng trái phép danh tính của ứng viên.
+
+Xem chi tiết
+
+Buôn bán lao động
+
+Đưa ra lời mời làm việc dễ dàng bất thường, mức đãi ngộ cao, yêu cầu không rõ ràng, địa điểm làm việc ở nước ngoài.
+
+Xem chi tiết
+
+Giả dạng công ty lớn, uy tín
+
+Đăng tin mạo danh các tập đoàn quy mô lớn, gửi thông tin trực tiếp qua tin nhắn riêng cho người tìm việc.
+
+Xem chi tiết
+
+Tham gia thực hiện nhiệm vụ
+
+Yêu cầu ứng viên tham gia khảo sát/thử việc hoặc làm nhiệm vụ bằng cách cài đặt các ứng dụng điện thoại.
+
+Xem chi tiết
+
+Lừa đảo thu phí
+
+Đưa ra lời mời làm việc dễ dàng bất thường, đãi ngộ cao, kèm theo yêu cầu nộp các loại phí.
+
+Xem chi tiết
+
+Đánh cắp thông tin ngân hàng
+
+Yêu cầu cung cấp thông tin tài khoản ngân hàng, mật khẩu, thẻ thanh toán, mã OTP.
+
+Xem chi tiết
+Báo cáo tin tuyển dụng
+Việc làm cùng công ty
+Senior Software Engineer
+Công Ty Cổ Phần Vinsmart Future
+Thương lượng
+Hà Nội, Hồ Chí Minh
+Software Manager
+CÔNG TY CỔ PHẦN VINSMART FUTURE
+Thương lượng
+Hà Nội, Hồ Chí Minh
+MLOps/ DevOps Engineer
+CÔNG TY CỔ PHẦN VINSMART FUTURE
+Thương lượng
+Hồ Chí Minh, Hà Nội
+Solution Architect - Business Enterprise Architect (Platform & AI)
+CÔNG TY CỔ PHẦN VINSMART FUTURE
+Thương lượng
+Hà Nội
+Xem thêm
+tìm việc làmtuyển dụngthần số họccv xin việcmẫu cvviệc làm bắc giangviệc làm hưng yênviệc làm bà rịa vũng tàuviệc làm quảng ngãiviệc làm nam địnhviệc làm huếviệc làm thái bìnhviệc làm ninh bìnhviệc làm hà tĩnhviệc làm tphcmviệc làm đà nẵngviệc làm hải phòngviệc làm cần thơviệc làm bình dươngtìm việc làm tại hà nộiviệc làm nhân viên kinh doanhtuyển dụng kế toán trưởngviệc làm salestuyển dụng marketingtuyển dụng content marketingtuyển dụng nhân sựtuyển dụng kế toán tổng hợptuyển dụng kiểm toántuyển dụng truyền thôngviệc làm qa qctuyển dụng brand marketingtuyển dụng hr managerviệc làm ngành maytuyển dụng marketing managerviệc làm giáo dụcviệc làm partimetuyển dụng nhân viên thiết kếtuyển dụng tài chínhviệc làm tự động hóaviệc làm báo chítuyển dụng kiểm toán ngân hàngviệc làm in ấndata analystCông ty CP Navigos Group Việt Nam. Địa chỉ: Tầng 20, tòa nhà e.town Central, 11 Đoàn Văn Bơ, Phường 13, Quận 4, TP. HCM. Giấy CNĐKDN số 0304836029 do Sở Kế Hoạch và Đầu Tư Thành phố Hồ Chí Minh cấp lần đầu ngày 11/12/2006
+VietnamWorks
+Về VietnamWorks
+Về VietnamWorks inTECH
+Liên Hệ
+Hỏi Đáp
+Thỏa Thuận Sử Dụng
+Quy Định Bảo Mật
+Quy Chế Hoạt Động Sàn Giao Dịch Thương Mại Điện Tử VietnamWorks
+Sơ Đồ Trang Web
+Dành cho Nhà tuyển dụng
+Đăng tuyển dụng
+Tìm kiếm hồ sơ
+Sản phẩm Dịch vụ khác
+Liên hệ
+Việc làm theo khu vực
+Hồ Chí Minh
+Hà Nội
+Hải Phòng
+Đà Nẵng
+Cần Thơ
+Xem tất cả khu vực
+Việc làm theo ngành nghề
+Kế toán
+Ngân hàng
+Phần mềm máy tính
+IT Support / Help Desk
+Xây dựng
+Tìm việc làm
+Ứng dụng di động
+Chứng nhận bởi
+Theo dõi Vietnamworks trên
+Copyright © Công Ty Cổ Phần Navigos Group Việt Nam
+
+Tầng 20, tòa nhà E.Town Central, 11 Đoàn Văn Bơ, Phường 13, Quận 4, TP.HCM, Việt Nam
+© VietnamWorks
+Powered by
+
+AI Engineer (Agentic AI)
+
+Thương lượng
+Hết hạn trong 22 ngày
+Hà Nội, Hồ Chí Minh
+Nộp đơn
