@@ -50,17 +50,3 @@
 # if __name__ == "__main__":
 #     main()
 
-from minio import Minio
-
-client = Minio(
-    endpoint="localhost:9000",
-    access_key="joblake_admin",
-    secret_key="joblake_minio_2026_dev",
-    secure=False,
-)
-
-bucket_name = "joblake"
-
-client.remove_bucket(bucket_name)
-
-print(f"Deleted bucket: {bucket_name}")
