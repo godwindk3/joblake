@@ -99,11 +99,11 @@ detail:
       - /it-jobs/
 
   # Đặt null nếu muốn crawl toàn bộ URL pending.
-  max_jobs_per_run: 20
+  max_jobs_per_run: null
 
   delay:
-    min_seconds: 15
-    max_seconds: 35
+    min_seconds: 5
+    max_seconds: 10
 
   proxy:
     enabled: false
