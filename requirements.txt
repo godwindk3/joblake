@@ -6,3 +6,4 @@ PyYAML
 python-dotenv
 cloakbrowser[geoip]
 minio
+psycopg[binary]>=3.2,<4

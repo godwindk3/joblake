@@ -14,6 +14,7 @@ dependencies = [
     "cloakbrowser[geoip]",
     "python-dotenv",
     "minio",
+    "psycopg[binary]>=3.2,<4",
 ]
 
 [tool.setuptools.packages.find]

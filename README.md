@@ -8,6 +8,11 @@ See [MinIO raw storage and SQLite state](docs/storage-state.md) for the
 runtime configuration, state model, validation flow, and future parser
 query.
 
+PostgreSQL is provisioned separately for parsed/curated job data. It is
+not used for the crawler's current SQLite state queue. See
+[PostgreSQL setup](docs/postgres-setup.md) to start the service and
+install the Python driver.
+
 Available source configs:
 
 - `configs/topcv.yaml`
