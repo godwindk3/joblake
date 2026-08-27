@@ -105,7 +105,7 @@ detail:
     max_seconds: 35
 
   proxy:
-    enabled: true
+    enabled: false
     server_env: TOPCV_DETAIL_PROXY
     username_env: TOPCV_PROXY_USERNAME
     password_env: TOPCV_PROXY_PASSWORD

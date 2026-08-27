@@ -121,8 +121,8 @@ storage:
   provider: minio
   endpoint: localhost:9000
   endpoint_env: MINIO_ENDPOINT
-  access_key_env: MINIO_ROOT_USER
-  secret_key_env: MINIO_ROOT_PASSWORD
+  access_key_env: MINIO_ACCESS_KEY
+  secret_key_env: MINIO_SECRET_KEY
   bucket_name: joblake
   secure: false
   ensure_bucket: true
