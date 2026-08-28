@@ -216,3 +216,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+.venv/
+__pycache__/
+*.py[cod]
+
+.env
+data/raw/
+data/state/
+
+.pytest_cache/
+
+cloak_test_output/

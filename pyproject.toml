@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "joblake"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "beautifulsoup4",
+    "playwright",
+    "PyYAML",
+    "requests",
+    "cloakbrowser[geoip]",
+    "python-dotenv",
+    "minio",
+    "psycopg[binary]>=3.2,<4",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

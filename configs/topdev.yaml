@@ -1,0 +1,105 @@
+source: topdev
+source_adapter: joblake.sources.topdev.TopDevSource
+enabled: true
+
+discovery:
+  # Listing HTML hiện có đủ job links và pagination khi dùng requests.
+  transport: requests
+  timeout_seconds: 30
+  continue_on_target_error: true
+
+  retry:
+    max_attempts: 3
+    base_delay_seconds: 5
+    max_delay_seconds: 30
+
+  pagination:
+    page_param: page
+    start_page: 1
+    strategy: detect_last_page
+    max_auto_pages: 200
+
+  delay:
+    min_seconds: 3
+    max_seconds: 7
+
+  proxy:
+    enabled: false
+    server_env: TOPDEV_DISCOVERY_PROXY
+    username_env: TOPDEV_PROXY_USERNAME
+    password_env: TOPDEV_PROXY_PASSWORD
+
+  targets:
+    - name: information_technology
+      enabled: true
+      base_url: https://topdev.vn/jobs/search
+      params:
+        job_categories_ids: "2,3,4,5,6,7,8,9,10,11,12,13,67"
+
+detail:
+  # Dùng CloakBrowser an toàn trước; có thể thử requests riêng sau.
+  transport: cloakbrowser
+  headless: false
+  timeout_seconds: 60
+
+  humanize: true
+  geoip: true
+  storage_state_path: data/state/topdev_browser_state.json
+
+  settle_seconds:
+    min: 5
+    max: 5
+
+  browser_actions:
+    - action: scroll
+      times: 10
+      delta_y: 1200
+      wait_after_ms: 700
+
+  retry:
+    max_attempts: 3
+    base_delay_seconds: 10
+    max_delay_seconds: 60
+
+  validation:
+    min_html_bytes: 5000
+    min_text_chars: 100
+    required_selectors:
+      - body#frontend-v4
+    allowed_hosts:
+      - topdev.vn
+      - www.topdev.vn
+    required_path_prefixes:
+      - /detail-jobs/
+
+  max_jobs_per_run: 20
+
+  delay:
+    min_seconds: 10
+    max_seconds: 25
+
+  proxy:
+    enabled: false
+    server_env: TOPDEV_DETAIL_PROXY
+    username_env: TOPDEV_PROXY_USERNAME
+    password_env: TOPDEV_PROXY_PASSWORD
+
+storage:
+  provider: minio
+  endpoint: localhost:9000
+  endpoint_env: MINIO_ENDPOINT
+  access_key_env: MINIO_ACCESS_KEY
+  secret_key_env: MINIO_SECRET_KEY
+  bucket_name: joblake
+  secure: false
+  ensure_bucket: true
+  prefix: raw
+  store_discovery: false
+
+state:
+  provider: sqlite
+  database_path: data/state/joblake.db
+  detail_max_attempts: 3
+  detail_retry_delay_seconds: 3600
+  integrity_check_on_start: true
+  integrity_check_limit: 100

@@ -1,0 +1,138 @@
+source: vietnamworks
+source_adapter: joblake.sources.vietnamworks.VietnamWorksSource
+enabled: true
+
+discovery:
+  transport: cloakbrowser
+  headless: false
+  timeout_seconds: 60
+  continue_on_target_error: true
+
+  humanize: true
+  geoip: true
+  storage_state_path: data/state/vietnamworks_browser_state.json
+  ready_selector: 'a.img_job_card[href], h2 a[href*="-jv"]'
+  ready_state: attached
+  ready_timeout_seconds: 30
+
+  settle_seconds:
+    min: 1
+    max: 2
+
+  browser_actions:
+    - action: scroll
+      times: 10
+      delta_y: 1200
+      wait_after_ms: 1000
+
+  retry:
+    max_attempts: 3
+    base_delay_seconds: 10
+    max_delay_seconds: 60
+
+  pagination:
+    page_param: page
+    start_page: 1
+    strategy: until_empty
+
+    # Hard limit để tránh chạy vô hạn nếu website bỏ qua page.
+    max_auto_pages: 200
+
+    # Dừng ở trang đầu tiên không extract được job URL.
+    stop_after_empty_pages: 1
+
+    # Nếu website trả lặp cùng dữ liệu, dừng sau 2 trang.
+    stop_after_stale_pages: 2
+
+  delay:
+    min_seconds: 5
+    max_seconds: 10
+
+  proxy:
+    enabled: false
+    server_env: VIETNAMWORKS_DISCOVERY_PROXY
+    username_env: VIETNAMWORKS_PROXY_USERNAME
+    password_env: VIETNAMWORKS_PROXY_PASSWORD
+
+  targets:
+    - name: information_technology
+      enabled: true
+      base_url: https://www.vietnamworks.com/viec-lam
+      params:
+        g: 5
+
+detail:
+  transport: cloakbrowser
+  headless: false
+  timeout_seconds: 60
+
+  humanize: true
+  geoip: true
+  storage_state_path: data/state/vietnamworks_browser_state.json
+  ready_selector: h1
+  ready_state: attached
+  ready_timeout_seconds: 30
+
+  # Script test chờ 5 giây trước khi mở rộng mô tả.
+  settle_seconds:
+    min: 5
+    max: 5
+
+  browser_actions:
+    - action: click
+      selector: 'button[aria-label="Xem đầy đủ mô tả công việc"]'
+      optional: true
+      scroll_into_view: true
+      wait_after_ms: 1000
+
+    - action: click
+      selector: '#vnwLayout__col button[aria-label="Xem thêm"]'
+      optional: true
+      scroll_into_view: true
+      wait_after_ms: 1000
+
+  retry:
+    max_attempts: 3
+    base_delay_seconds: 10
+    max_delay_seconds: 60
+
+  validation:
+    min_html_bytes: 5000
+    min_text_chars: 100
+    required_selectors:
+      - h1
+    allowed_hosts:
+      - vietnamworks.com
+      - www.vietnamworks.com
+
+  max_jobs_per_run: 20
+
+  delay:
+    min_seconds: 15
+    max_seconds: 35
+
+  proxy:
+    enabled: false
+    server_env: VIETNAMWORKS_DETAIL_PROXY
+    username_env: VIETNAMWORKS_PROXY_USERNAME
+    password_env: VIETNAMWORKS_PROXY_PASSWORD
+
+storage:
+  provider: minio
+  endpoint: localhost:9000
+  endpoint_env: MINIO_ENDPOINT
+  access_key_env: MINIO_ACCESS_KEY
+  secret_key_env: MINIO_SECRET_KEY
+  bucket_name: joblake
+  secure: false
+  ensure_bucket: true
+  prefix: raw
+  store_discovery: false
+
+state:
+  provider: sqlite
+  database_path: data/state/joblake.db
+  detail_max_attempts: 3
+  detail_retry_delay_seconds: 3600
+  integrity_check_on_start: true
+  integrity_check_limit: 100

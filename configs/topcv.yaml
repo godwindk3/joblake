@@ -1,0 +1,131 @@
+source: topcv
+source_adapter: joblake.sources.topcv.TopCVSource
+enabled: true
+
+discovery:
+  # TopCV hiện chặn requests nên tạm dùng CloakBrowser.
+  # Có thể đổi thành requests nếu endpoint hoạt động lại.
+  transport: cloakbrowser
+  headless: false
+  timeout_seconds: 60
+  continue_on_target_error: true
+
+  humanize: true
+  geoip: true
+  locale: vi-VN
+  timezone_id: Asia/Ho_Chi_Minh
+  storage_state_path: data/state/topcv_browser_state.json
+  ready_selector: "script[type='application/ld+json']"
+  ready_timeout_seconds: 30
+
+  settle_seconds:
+    min: 1.5
+    max: 4
+
+  retry:
+    max_attempts: 3
+    base_delay_seconds: 10
+    max_delay_seconds: 60
+
+  pagination:
+    page_param: page
+    start_page: 1
+    # Bỏ total_pages để tự đọc trang cuối từ HTML TopCV.
+    max_auto_pages: 200
+
+  delay:
+    min_seconds: 5
+    max_seconds: 10
+
+  proxy:
+    enabled: false
+    server_env: TOPCV_DISCOVERY_PROXY
+    username_env: TOPCV_PROXY_USERNAME
+    password_env: TOPCV_PROXY_PASSWORD
+
+  targets:
+    - name: information_technology
+      enabled: true
+      base_url: https://www.topcv.vn/tim-viec-lam-cong-nghe-thong-tin-cr257
+      params:
+        type_keyword: 1
+        category_family: r257
+        saturday_status: 0
+
+    # Thay base_url này khi mày có category thứ hai.
+    - name: second_category
+      enabled: false
+      base_url: https://www.topcv.vn/replace-with-second-category
+      params:
+        type_keyword: 1
+        saturday_status: 0
+
+      # Có thể override cấu hình phân trang chung.
+      start_page: 1
+      total_pages: 3
+
+detail:
+  transport: cloakbrowser
+  headless: false
+  timeout_seconds: 60
+
+  humanize: true
+  geoip: true
+  locale: vi-VN
+  timezone_id: Asia/Ho_Chi_Minh
+  storage_state_path: data/state/topcv_browser_state.json
+  ready_selector: h1
+  ready_timeout_seconds: 30
+
+  settle_seconds:
+    min: 1.5
+    max: 4
+
+  retry:
+    max_attempts: 3
+    base_delay_seconds: 10
+    max_delay_seconds: 60
+
+  validation:
+    min_html_bytes: 5000
+    min_text_chars: 100
+    required_selectors:
+      - h1
+    allowed_hosts:
+      - topcv.vn
+      - www.topcv.vn
+    required_path_prefixes:
+      - /viec-lam/
+
+  # Để 2 khi test. Đổi thành null khi muốn crawl hết.
+  max_jobs_per_run: null
+
+  delay:
+    min_seconds: 15
+    max_seconds: 35
+
+  proxy:
+    enabled: false
+    server_env: TOPCV_DETAIL_PROXY
+    username_env: TOPCV_PROXY_USERNAME
+    password_env: TOPCV_PROXY_PASSWORD
+
+storage:
+  provider: minio
+  endpoint: localhost:9000
+  endpoint_env: MINIO_ENDPOINT
+  access_key_env: MINIO_ACCESS_KEY
+  secret_key_env: MINIO_SECRET_KEY
+  bucket_name: joblake
+  secure: false
+  ensure_bucket: true
+  prefix: raw
+  store_discovery: false
+
+state:
+  provider: sqlite
+  database_path: data/state/joblake.db
+  detail_max_attempts: 3
+  detail_retry_delay_seconds: 3600
+  integrity_check_on_start: true
+  integrity_check_limit: 100
