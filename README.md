@@ -25,6 +25,9 @@ Run a complete source pipeline with:
 ```powershell
 python -m joblake.main --config configs/topdev.yaml
 python -m joblake.main --config configs/vietnamworks.yaml
+python -m joblake.main --config configs/vietnamworks.yaml --phase detail
+python -m joblake.main --config configs/vietnamworks.yaml --phase discovery
+python -m joblake.main --config configs/vietnamworks.yaml --phase full
 ```
 
 `` 
