@@ -222,6 +222,8 @@ __pycache__/
 *.py[cod]
 
 .env
+*.dump
+tmp/supabase-migration/
 data/raw/
 data/state/
 
