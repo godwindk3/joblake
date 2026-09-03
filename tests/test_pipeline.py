@@ -182,7 +182,58 @@ class PipelineStorage:
         return None
 
 
+class PipelineParseSummary:
+    has_failures = False
+
+
+class PipelineParseService:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def run(self, run_id):
+        self.calls.append(run_id)
+        return PipelineParseSummary()
+
+
 class IngestionPipelineTests(unittest.TestCase):
+
+    def test_parse_phase_is_lazy_and_does_not_run_fetchers(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = str(Path(directory) / "joblake.db")
+            config = self._config(database_path)
+            parse_calls = []
+
+            def forbidden_fetcher_factory(_):
+                raise AssertionError(
+                    "parse phase must not create a crawler fetcher"
+                )
+
+            def parse_service_factory(**_):
+                return PipelineParseService(parse_calls)
+
+            state = SQLiteStateStore(database_path)
+            pipeline = IngestionPipeline(
+                config=config,
+                source=PipelineSource(config),
+                storage=PipelineStorage(),
+                state=state,
+                fetcher_factory=forbidden_fetcher_factory,
+                parse_service_factory=parse_service_factory,
+            )
+
+            pipeline.run(phase="parse")
+
+            self.assertEqual(len(parse_calls), 1)
+            connection = sqlite3.connect(database_path)
+            try:
+                status = connection.execute(
+                    "SELECT status FROM crawl_runs"
+                ).fetchone()[0]
+            finally:
+                connection.close()
+            self.assertEqual(status, "completed")
 
     @patch("time.sleep")
     def test_pipeline_persists_raw_once_and_keeps_parse_table(

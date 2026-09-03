@@ -103,3 +103,18 @@ state:
   detail_retry_delay_seconds: 3600
   integrity_check_on_start: true
   integrity_check_limit: 100
+
+parse:
+  parser_adapter: joblake.parsing.parsers.topdev.TopDevParser
+  max_jobs_per_run: null
+  max_attempts: 3
+  stale_after_seconds: 3600
+
+postgres:
+  host_env: POSTGRES_HOST
+  port_env: POSTGRES_PORT
+  database_env: POSTGRES_DB
+  user_env: POSTGRES_USER
+  password_env: POSTGRES_PASSWORD
+  connect_timeout_seconds: 10
+  application_name: joblake-parser
