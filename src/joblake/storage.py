@@ -70,6 +70,11 @@ class StoredObject:
 
 class RawStorage(Protocol):
 
+    def read_object(
+        self,
+        locator: ObjectLocator,
+    ) -> bytes: ...
+
     def save_discovery(
         self,
         *,
@@ -162,6 +167,12 @@ class LocalRawStorage:
             content_sha256=_content_sha256(content),
         )
         return self._write_payload(payload)
+
+    def read_object(
+        self,
+        locator: ObjectLocator,
+    ) -> bytes:
+        return Path(locator.object_key).read_bytes()
 
     def prepare_detail(
         self,
@@ -408,6 +419,22 @@ class MinioRawStorage:
         )
         return self._put_payload(payload)
 
+    def read_object(
+        self,
+        locator: ObjectLocator,
+    ) -> bytes:
+        response = self.client.get_object(
+            locator.bucket_name,
+            locator.object_key,
+            version_id=locator.object_version,
+        )
+
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()
+
     def prepare_detail(
         self,
         *,
@@ -471,6 +498,7 @@ class MinioRawStorage:
                 "NoSuchKey",
                 "NoSuchObject",
                 "NoSuchBucket",
+                "NoSuchVersion",
             }:
                 return None
             raise

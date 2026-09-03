@@ -159,6 +159,7 @@ CREATE TABLE IF NOT EXISTS raw_objects (
 
 CREATE TABLE IF NOT EXISTS parse_attempts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER,
     job_id INTEGER NOT NULL,
     raw_object_id INTEGER NOT NULL,
     parser_name TEXT NOT NULL,
@@ -179,6 +180,7 @@ CREATE TABLE IF NOT EXISTS parse_attempts (
     output_location TEXT,
     error_type TEXT,
     error_message TEXT,
+    FOREIGN KEY(run_id) REFERENCES crawl_runs(id),
     FOREIGN KEY(job_id) REFERENCES jobs(id),
     FOREIGN KEY(raw_object_id) REFERENCES raw_objects(id),
     UNIQUE(
@@ -206,6 +208,7 @@ ON discovery_targets(run_id, status);
 
 CREATE INDEX IF NOT EXISTS idx_parse_pending
 ON parse_attempts(raw_object_id, parser_name, parser_version, status);
+
 """
 
 
@@ -230,6 +233,23 @@ class PendingUpload:
 class RawObjectCheck:
     raw_object_id: int
     job_id: int
+    locator: ObjectLocator
+    expected_size: int
+    expected_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class ParseClaim:
+    run_id: int
+    job_id: int
+    raw_object_id: int
+    attempt_id: int
+    attempt_number: int
+    source: str
+    canonical_url: str
+    first_seen_at: str
+    last_seen_at: str
+    fetched_at: str
     locator: ObjectLocator
     expected_size: int
     expected_sha256: str
@@ -375,6 +395,57 @@ class StateStore(Protocol):
         checked_at: str,
     ) -> None: ...
 
+    def claim_next_raw_for_parse(
+        self,
+        *,
+        run_id: int,
+        source: str,
+        parser_name: str,
+        parser_version: str,
+        started_at: str,
+        max_attempts: int,
+    ) -> ParseClaim | None: ...
+
+    def complete_parse(
+        self,
+        claim: ParseClaim,
+        *,
+        completed_at: str,
+        parsed_field_count: int,
+        missing_required_fields: list[str],
+        warnings: list[dict],
+        output_location: str,
+    ) -> None: ...
+
+    def fail_parse(
+        self,
+        claim: ParseClaim,
+        *,
+        status: str,
+        completed_at: str,
+        error_type: str,
+        error_message: str,
+        missing_required_fields: list[str] | None = None,
+        warnings: list[dict] | None = None,
+        integrity_status: str | None = None,
+    ) -> None: ...
+
+    def recover_stale_parses(
+        self,
+        source: str,
+        recovered_at: str,
+        stale_before: str,
+    ) -> None: ...
+
+    def count_exhausted_parses(
+        self,
+        *,
+        source: str,
+        parser_name: str,
+        parser_version: str,
+        max_attempts: int,
+    ) -> int: ...
+
 
 class SQLiteStateStore:
 
@@ -424,6 +495,44 @@ class SQLiteStateStore:
         with self._connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
             connection.executescript(SCHEMA_SQL)
+            self._migrate_parse_attempts(connection)
+
+    @staticmethod
+    def _migrate_parse_attempts(
+        connection: sqlite3.Connection,
+    ) -> None:
+        columns = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA table_info(parse_attempts)"
+            ).fetchall()
+        }
+        if "run_id" not in columns:
+            connection.execute(
+                """
+                ALTER TABLE parse_attempts
+                ADD COLUMN run_id INTEGER
+                REFERENCES crawl_runs(id)
+                """
+            )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_parse_run
+            ON parse_attempts(run_id, status)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_parse_claim
+            ON parse_attempts(
+                parser_name,
+                parser_version,
+                raw_object_id,
+                status,
+                run_id
+            )
+            """
+        )
 
     def start_run(
         self,
@@ -1343,6 +1452,360 @@ class SQLiteStateStore:
                 ),
             )
 
+    def claim_next_raw_for_parse(
+        self,
+        *,
+        run_id: int,
+        source: str,
+        parser_name: str,
+        parser_version: str,
+        started_at: str,
+        max_attempts: int,
+    ) -> ParseClaim | None:
+        if max_attempts < 1:
+            raise ValueError("parse max_attempts must be at least 1")
+
+        connection = self._open_connection()
+
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT
+                    j.id AS job_id,
+                    j.source,
+                    j.url,
+                    j.first_seen_at,
+                    j.last_seen_at,
+                    r.id AS raw_object_id,
+                    r.storage_provider,
+                    r.bucket_name,
+                    r.object_key,
+                    r.object_version,
+                    r.content_length_bytes,
+                    r.content_sha256,
+                    r.fetched_at,
+                    COALESCE(p.attempt_count, 0) AS attempt_count
+                FROM jobs AS j
+                JOIN raw_objects AS r ON r.job_id = j.id
+                LEFT JOIN (
+                    SELECT
+                        raw_object_id,
+                        COUNT(*) AS attempt_count,
+                        MAX(CASE
+                            WHEN status IN (
+                                'success',
+                                'validation_error',
+                                'raw_missing',
+                                'raw_corrupt'
+                            ) THEN 1 ELSE 0
+                        END) AS is_terminal,
+                        MAX(CASE
+                            WHEN status = 'parsing'
+                            THEN 1 ELSE 0
+                        END) AS is_active,
+                        MAX(CASE
+                            WHEN run_id = ?
+                            THEN 1 ELSE 0
+                        END) AS attempted_this_run
+                    FROM parse_attempts
+                    WHERE parser_name = ?
+                      AND parser_version = ?
+                    GROUP BY raw_object_id
+                ) AS p ON p.raw_object_id = r.id
+                WHERE j.source = ?
+                  AND j.raw_status = 'raw_ready'
+                  AND r.integrity_status = 'valid'
+                  AND COALESCE(p.is_terminal, 0) = 0
+                  AND COALESCE(p.is_active, 0) = 0
+                  AND COALESCE(p.attempted_this_run, 0) = 0
+                  AND COALESCE(p.attempt_count, 0) < ?
+                ORDER BY j.first_seen_at, j.id
+                LIMIT 1
+                """,
+                (
+                    run_id,
+                    parser_name,
+                    parser_version,
+                    source,
+                    max_attempts,
+                ),
+            ).fetchone()
+
+            if row is None:
+                connection.commit()
+                return None
+
+            attempt_number = int(row["attempt_count"]) + 1
+            cursor = connection.execute(
+                """
+                INSERT INTO parse_attempts (
+                    run_id,
+                    job_id,
+                    raw_object_id,
+                    parser_name,
+                    parser_version,
+                    attempt_number,
+                    status,
+                    started_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, 'parsing', ?)
+                """,
+                (
+                    run_id,
+                    row["job_id"],
+                    row["raw_object_id"],
+                    parser_name,
+                    parser_version,
+                    attempt_number,
+                    started_at,
+                ),
+            )
+            connection.commit()
+
+            return ParseClaim(
+                run_id=run_id,
+                job_id=int(row["job_id"]),
+                raw_object_id=int(row["raw_object_id"]),
+                attempt_id=int(cursor.lastrowid),
+                attempt_number=attempt_number,
+                source=row["source"],
+                canonical_url=row["url"],
+                first_seen_at=row["first_seen_at"],
+                last_seen_at=row["last_seen_at"],
+                fetched_at=row["fetched_at"],
+                locator=ObjectLocator(
+                    provider=row["storage_provider"],
+                    bucket_name=row["bucket_name"],
+                    object_key=row["object_key"],
+                    object_version=row["object_version"],
+                ),
+                expected_size=int(row["content_length_bytes"]),
+                expected_sha256=row["content_sha256"],
+            )
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def complete_parse(
+        self,
+        claim: ParseClaim,
+        *,
+        completed_at: str,
+        parsed_field_count: int,
+        missing_required_fields: list[str],
+        warnings: list[dict],
+        output_location: str,
+    ) -> None:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE parse_attempts
+                SET
+                    status = 'success',
+                    completed_at = ?,
+                    parsed_field_count = ?,
+                    missing_required_fields = ?,
+                    warnings = ?,
+                    output_location = ?,
+                    error_type = NULL,
+                    error_message = NULL
+                WHERE id = ?
+                  AND run_id = ?
+                  AND status = 'parsing'
+                """,
+                (
+                    completed_at,
+                    parsed_field_count,
+                    json.dumps(
+                        missing_required_fields,
+                        ensure_ascii=False,
+                    ),
+                    json.dumps(warnings, ensure_ascii=False),
+                    output_location,
+                    claim.attempt_id,
+                    claim.run_id,
+                ),
+            )
+            _require_parse_transition(cursor, claim)
+
+    def fail_parse(
+        self,
+        claim: ParseClaim,
+        *,
+        status: str,
+        completed_at: str,
+        error_type: str,
+        error_message: str,
+        missing_required_fields: list[str] | None = None,
+        warnings: list[dict] | None = None,
+        integrity_status: str | None = None,
+    ) -> None:
+        allowed_statuses = {
+            "parse_error",
+            "validation_error",
+            "raw_missing",
+            "raw_corrupt",
+        }
+        if status not in allowed_statuses:
+            raise ValueError(f"Unsupported parse failure status: {status}")
+
+        if status == "raw_missing":
+            integrity_status = "missing"
+        elif status == "raw_corrupt" and integrity_status not in {
+            "size_mismatch",
+            "hash_mismatch",
+        }:
+            integrity_status = "hash_mismatch"
+
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE parse_attempts
+                SET
+                    status = ?,
+                    completed_at = ?,
+                    missing_required_fields = ?,
+                    warnings = ?,
+                    error_type = ?,
+                    error_message = ?
+                WHERE id = ?
+                  AND run_id = ?
+                  AND status = 'parsing'
+                """,
+                (
+                    status,
+                    completed_at,
+                    json.dumps(
+                        missing_required_fields or [],
+                        ensure_ascii=False,
+                    ),
+                    json.dumps(
+                        warnings or [],
+                        ensure_ascii=False,
+                    ),
+                    error_type,
+                    error_message,
+                    claim.attempt_id,
+                    claim.run_id,
+                ),
+            )
+            _require_parse_transition(cursor, claim)
+
+            if integrity_status is not None:
+                job_status = (
+                    "storage_missing"
+                    if integrity_status == "missing"
+                    else "storage_corrupt"
+                )
+                connection.execute(
+                    """
+                    UPDATE raw_objects
+                    SET
+                        integrity_status = ?,
+                        last_integrity_check_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        integrity_status,
+                        completed_at,
+                        claim.raw_object_id,
+                    ),
+                )
+                connection.execute(
+                    """
+                    UPDATE jobs
+                    SET
+                        raw_status = ?,
+                        last_error_type = ?,
+                        last_error_message = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (
+                        job_status,
+                        error_type,
+                        error_message,
+                        claim.job_id,
+                    ),
+                )
+
+    def recover_stale_parses(
+        self,
+        source: str,
+        recovered_at: str,
+        stale_before: str,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE parse_attempts
+                SET
+                    status = 'parse_error',
+                    completed_at = ?,
+                    error_type = 'InterruptedRun',
+                    error_message = 'Recovered unfinished parse from a previous process'
+                WHERE status = 'parsing'
+                  AND started_at <= ?
+                  AND job_id IN (
+                      SELECT id FROM jobs WHERE source = ?
+                  )
+                """,
+                (recovered_at, stale_before, source),
+            )
+
+    def count_exhausted_parses(
+        self,
+        *,
+        source: str,
+        parser_name: str,
+        parser_version: str,
+        max_attempts: int,
+    ) -> int:
+        if max_attempts < 1:
+            raise ValueError("parse max_attempts must be at least 1")
+
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS exhausted_count
+                FROM (
+                    SELECT r.id
+                    FROM jobs AS j
+                    JOIN raw_objects AS r ON r.job_id = j.id
+                    LEFT JOIN parse_attempts AS p
+                      ON p.raw_object_id = r.id
+                     AND p.parser_name = ?
+                     AND p.parser_version = ?
+                    WHERE j.source = ?
+                      AND j.raw_status = 'raw_ready'
+                      AND r.integrity_status = 'valid'
+                    GROUP BY r.id
+                    HAVING MAX(CASE
+                        WHEN p.status IN (
+                            'success',
+                            'validation_error',
+                            'raw_missing',
+                            'raw_corrupt'
+                        ) THEN 1 ELSE 0
+                    END) = 0
+                    AND MAX(CASE
+                        WHEN p.status = 'parsing' THEN 1 ELSE 0
+                    END) = 0
+                    AND COUNT(p.id) >= ?
+                ) AS exhausted
+                """,
+                (
+                    parser_name,
+                    parser_version,
+                    source,
+                    max_attempts,
+                ),
+            ).fetchone()
+        return int(row["exhausted_count"])
+
     def load_crawled_urls(self) -> set[str]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -1354,6 +1817,17 @@ class SQLiteStateStore:
             ).fetchall()
 
         return {row["url"] for row in rows}
+
+
+def _require_parse_transition(
+    cursor: sqlite3.Cursor,
+    claim: ParseClaim,
+) -> None:
+    if cursor.rowcount != 1:
+        raise RuntimeError(
+            "Parse attempt is no longer owned by this run: "
+            f"attempt_id={claim.attempt_id}, run_id={claim.run_id}"
+        )
 
 
 class FileStateStore:

@@ -48,6 +48,9 @@ class LocalRawStorageTests(unittest.TestCase):
                     stored.content_sha256
                 ),
             )
+            content = storage.read_object(
+                stored.locator
+            )
 
             self.assertEqual(
                 first_payload.locator.object_key,
@@ -59,6 +62,10 @@ class LocalRawStorageTests(unittest.TestCase):
                 ).is_file()
             )
             self.assertIsNotNone(stat)
+            self.assertEqual(
+                content,
+                result.html.encode("utf-8"),
+            )
             self.assertEqual(
                 stat.content_sha256,
                 stored.content_sha256,

@@ -35,6 +35,7 @@ class IngestionPipeline:
         storage: RawStorage | None = None,
         state: StateStore | None = None,
         fetcher_factory=None,
+        parse_service_factory=None,
     ):
         if fetcher_factory is None:
             from joblake.fetchers import create_fetcher
@@ -46,16 +47,18 @@ class IngestionPipeline:
         self.storage = storage or create_raw_storage(config)
         self.state = state or create_state_store(config)
         self.fetcher_factory = fetcher_factory
+        self.parse_service_factory = parse_service_factory
 
     def run(self, phase: str = "full") -> None:
         if phase not in {
             "full",
             "discovery",
             "detail",
+            "parse",
         }:
             raise ValueError(
                 "phase must be one of: "
-                "full, discovery, detail"
+                "full, discovery, detail, parse"
             )
 
         run_id = self.state.start_run(
@@ -66,17 +69,22 @@ class IngestionPipeline:
         discovered_url_count = 0
         new_url_count = 0
 
-        try:
-            self._recover_interrupted_work()
-        except Exception as exc:
-            self._finish_failed_run(
-                run_id,
-                status="failed",
-                error=exc,
-                discovered_url_count=0,
-                new_url_count=0,
-            )
-            raise
+        if phase != "parse":
+            try:
+                self._recover_interrupted_work()
+            except Exception as exc:
+                self._finish_failed_run(
+                    run_id,
+                    status="failed",
+                    error=exc,
+                    discovered_url_count=0,
+                    new_url_count=0,
+                )
+                raise
+
+        if phase == "parse":
+            self._run_parse_phase(run_id)
+            return
 
         if phase in {"full", "discovery"}:
             crawler = self._create_discovery_crawler(
@@ -206,6 +214,47 @@ class IngestionPipeline:
             finished_at=_utc_now(),
             discovered_url_count=discovered_url_count,
             new_url_count=new_url_count,
+        )
+
+    def _run_parse_phase(self, run_id: int) -> None:
+        print("========== PHASE 3: PARSE ==========")
+
+        try:
+            if self.parse_service_factory is None:
+                from joblake.parsing.service import ParseService
+
+                service = ParseService(
+                    config=self.config,
+                    storage=self.storage,
+                    state=self.state,
+                )
+            else:
+                service = self.parse_service_factory(
+                    config=self.config,
+                    storage=self.storage,
+                    state=self.state,
+                )
+            summary = service.run(run_id)
+        except Exception as exc:
+            self._finish_failed_run(
+                run_id,
+                status="failed",
+                error=exc,
+                discovered_url_count=0,
+                new_url_count=0,
+            )
+            raise
+
+        self.state.finish_run(
+            run_id,
+            status=(
+                "suspicious"
+                if summary.has_failures
+                else "completed"
+            ),
+            finished_at=_utc_now(),
+            discovered_url_count=0,
+            new_url_count=0,
         )
 
     def _create_discovery_crawler(

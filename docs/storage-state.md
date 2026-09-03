@@ -1,7 +1,7 @@
 # MinIO raw storage and SQLite state
 
-JobLake uses MinIO for immutable raw detail HTML and SQLite for crawl
-state, object locators, validation reports, and future parse state.
+JobLake uses MinIO for immutable raw detail HTML, SQLite for crawl and
+parse state, and PostgreSQL for accepted normalized job records.
 
 ## Runtime configuration
 
@@ -10,8 +10,8 @@ state, object locators, validation reports, and future parse state.
 variables as Docker Compose:
 
 ```dotenv
-MINIO_ROOT_USER=replace-me
-MINIO_ROOT_PASSWORD=replace-me
+MINIO_ACCESS_KEY=replace-me
+MINIO_SECRET_KEY=replace-me
 
 # Optional when the crawler runs on the host.
 MINIO_ENDPOINT=localhost:9000
@@ -27,8 +27,8 @@ storage:
   provider: minio
   endpoint: localhost:9000
   endpoint_env: MINIO_ENDPOINT
-  access_key_env: MINIO_ROOT_USER
-  secret_key_env: MINIO_ROOT_PASSWORD
+  access_key_env: MINIO_ACCESS_KEY
+  secret_key_env: MINIO_SECRET_KEY
   bucket_name: joblake
   secure: false
   ensure_bucket: true
@@ -58,11 +58,12 @@ detail queue from SQLite:
 python -m joblake.main --config configs/itviec.yaml --phase full
 ```
 
-The two phases can also run independently:
+The crawl phases can also run independently:
 
 ```powershell
 python -m joblake.main --config configs/itviec.yaml --phase discovery
 python -m joblake.main --config configs/itviec.yaml --phase detail
+python -m joblake.main --config configs/itviec.yaml --phase parse
 ```
 
 `detail` does not need discovery to run in the same process. It claims
@@ -71,6 +72,12 @@ pending URLs already stored in `jobs`. With
 marks only that target as failed; other targets continue and `full`
 still enters the detail phase. A source-wide block such as Cloudflare
 still stops the run to avoid repeatedly hitting the blocked website.
+
+`parse` is intentionally separate from `full`: it reads only existing
+`raw_ready` objects from MinIO and writes accepted records to PostgreSQL.
+It never fetches a job URL. If a previous detail process stopped while
+an upload was still in progress, first run `--phase detail` once so its
+upload-recovery logic can finalize that object.
 
 ## State tables
 
@@ -81,8 +88,8 @@ still stops the run to avoid repeatedly hitting the blocked website.
 - `fetch_attempts`: immutable history of detail attempts and validation
   failures.
 - `raw_objects`: the single accepted raw object locator for each job.
-- `parse_attempts`: reserved for versioned parsers; the current pipeline
-  does not write this table yet.
+- `parse_attempts`: versioned parser attempt history, quality issues and
+  the PostgreSQL result locator.
 
 ## Detail state flow
 
@@ -134,10 +141,9 @@ Selectors supported by the lightweight validator include `tag`, `#id`,
 `.class`, `tag[attr]`, and `tag[attr='value']`. Source adapters can later
 override `validate_detail_html()` for stronger website-specific rules.
 
-## Finding raw HTML for parsing
+## Parse flow and finding raw HTML
 
-The future parse phase should query SQLite instead of listing the MinIO
-bucket:
+The parse phase queries SQLite instead of listing the MinIO bucket:
 
 ```sql
 SELECT
@@ -159,13 +165,29 @@ AND NOT EXISTS (
     WHERE p.raw_object_id = r.id
       AND p.parser_name = :parser_name
       AND p.parser_version = :parser_version
-      AND p.status = 'success'
+      AND p.status IN (
+          'success',
+          'validation_error',
+          'raw_missing',
+          'raw_corrupt'
+      )
 );
 ```
 
 The parser downloads `bucket_name + object_key`, checks byte length and
-SHA-256, then parses. A new parser version reuses the same raw object and
-does not call the source website again.
+SHA-256, then uses the configured source parser. A new parser version
+reuses the same raw object and does not call the source website again.
+Successful and partial records are written transactionally to PostgreSQL
+before SQLite marks the attempt successful. Replaying the same raw hash
+and parser version returns the existing PostgreSQL row without overwriting
+it.
+
+Rejected output is retained in `parse_attempts` with validation issues
+but is not inserted into PostgreSQL. Transient parser/database failures
+retry in a later parse run up to `parse.max_attempts`; exhausted objects
+make the run `suspicious` and are reported in its summary. In-progress
+claims are only recovered after `parse.stale_after_seconds` (default one
+hour), preventing a second parser process from stealing a recent claim.
 
 At startup, the configured integrity audit rotates through raw objects
 that were checked least recently. It uses MinIO object metadata to detect

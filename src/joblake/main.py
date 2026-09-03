@@ -25,11 +25,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--phase",
-        choices=("full", "discovery", "detail"),
+        choices=("full", "discovery", "detail", "parse"),
         default="full",
         help=(
-            "Run both phases, discovery only, "
-            "or detail only"
+            "Run discovery plus detail, discovery only, "
+            "detail only, or parse existing raw HTML into PostgreSQL"
         ),
     )
 
