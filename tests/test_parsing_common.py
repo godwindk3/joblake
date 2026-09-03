@@ -30,6 +30,14 @@ class TextCleaningTests(unittest.TestCase):
             "Chăm sóc toàn diện với BH tai nạn 24/7, khám sức khỏe định kỳ.",
         )
 
+    def test_extracts_text_when_the_requested_tag_is_inline(self) -> None:
+        tag = BeautifulSoup(
+            "<a class='name'>Công ty <strong>Acme</strong></a>",
+            "html.parser",
+        ).a
+
+        self.assertEqual(tag_text(tag), "Công ty Acme")
+
     def test_keeps_block_and_explicit_breaks(self) -> None:
         text = html_fragment_to_text(
             "<p>Build <span>reliable</span> APIs.</p>"

@@ -195,6 +195,9 @@ def _html_node_to_text(node: Tag | BeautifulSoup) -> str | None:
             flush_line()
 
     walk(node)
+    # The requested node can itself be inline (for example, an employer
+    # link). In that case no block boundary calls ``flush_line``.
+    flush_line()
     return clean_text("\n".join(lines))
 
 
