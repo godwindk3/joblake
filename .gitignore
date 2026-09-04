@@ -227,6 +227,10 @@ tmp/supabase-migration/
 data/raw/
 data/state/
 
+# Local Airflow runtime state and overrides
+orchestration/airflow/.env
+orchestration/airflow/logs/
+
 .pytest_cache/
 
 cloak_test_output/

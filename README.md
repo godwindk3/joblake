@@ -41,3 +41,25 @@ alembic upgrade head
 `full` intentionally remains discovery + detail. Running `parse` is a
 separate, restartable step that reads existing raw HTML from MinIO; it
 does not contact the source website.
+
+## Airflow control plane (setup only)
+
+The repository includes an isolated Apache Airflow local environment at
+`orchestration/airflow`. It currently contains no JobLake DAG and has no
+connection to the crawler, MinIO, or the curated PostgreSQL database.
+
+See [the Airflow plan](docs/airflow-plan.md) for setup commands, design
+decisions, integration boundaries, and the staged adoption roadmap.
+
+Use the project-level management script to control both the JobLake data
+services and Airflow with one command:
+
+```powershell
+.\scripts\docker.ps1 help
+.\scripts\docker.ps1 start
+.\scripts\docker.ps1 status
+.\scripts\docker.ps1 stop
+```
+
+Pass `core` or `airflow` as the second argument to operate on only one
+stack, for example `.\scripts\docker.ps1 logs airflow`.
