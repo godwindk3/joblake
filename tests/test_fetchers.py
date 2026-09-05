@@ -1,8 +1,15 @@
 import unittest
+from unittest.mock import Mock, patch
 
 from joblake.browser_actions import (
     run_browser_actions,
 )
+from joblake.fetchers import (
+    RequestsFetcher,
+    RetrySettings,
+    _fetch_browser_page,
+)
+from joblake.models import HttpStatusError
 
 
 class _FakeMouse:
@@ -106,6 +113,85 @@ class BrowserActionsTests(unittest.TestCase):
                 ("wait", 1000),
             ],
         )
+
+
+class RequestsFetcherTests(unittest.TestCase):
+
+    @patch("joblake.fetchers.requests.Session")
+    def test_410_raises_structured_error_without_retry(
+        self,
+        session_class,
+    ) -> None:
+        response = Mock()
+        response.status_code = 410
+        response.url = "https://example.com/job/gone"
+        response.text = "verify you are human"
+        response.headers = {"content-type": "text/html"}
+        response.request.url = response.url
+        session_class.return_value.get.return_value = response
+        fetcher = RequestsFetcher({
+            "timeout_seconds": 10,
+            "retry": {
+                "max_attempts": 3,
+                "base_delay_seconds": 0,
+                "max_delay_seconds": 0,
+            },
+        })
+
+        with self.assertRaises(HttpStatusError) as context:
+            fetcher.fetch(response.url)
+
+        self.assertEqual(context.exception.status_code, 410)
+        self.assertEqual(
+            context.exception.fetch_result.final_url,
+            response.url,
+        )
+        session_class.return_value.get.assert_called_once()
+
+
+class _GoneBrowserResponse:
+    status = 410
+    headers = {"content-type": "text/html"}
+
+
+class _GoneBrowserPage:
+
+    def __init__(self) -> None:
+        self.url = "https://example.com/job/gone"
+        self.goto_calls = 0
+
+    def goto(self, url, **kwargs):
+        self.goto_calls += 1
+        self.url = url
+        return _GoneBrowserResponse()
+
+    def content(self) -> str:
+        return "verify you are human"
+
+
+class BrowserFetcherTests(unittest.TestCase):
+
+    def test_410_raises_structured_error_without_retry(
+        self,
+    ) -> None:
+        page = _GoneBrowserPage()
+
+        with self.assertRaises(HttpStatusError) as context:
+            _fetch_browser_page(
+                page=page,
+                url=page.url,
+                params=None,
+                referer=None,
+                config={"timeout_seconds": 10},
+                retry_settings=RetrySettings(max_attempts=3),
+            )
+
+        self.assertEqual(context.exception.status_code, 410)
+        self.assertEqual(
+            context.exception.fetch_result.final_url,
+            page.url,
+        )
+        self.assertEqual(page.goto_calls, 1)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from joblake.discovery import DiscoveryCrawler
 from joblake.models import (
     FetchError,
+    HttpStatusError,
     PaginationDetectionError,
     SourceBlockedError,
     StorageIntegrityError,
@@ -424,6 +425,35 @@ class IngestionPipeline:
             )
             print(f"Detail crawling blocked: {exc}")
             return False
+
+        except HttpStatusError as exc:
+            retryable = exc.status_code != 410
+            self.state.fail_attempt(
+                claim=claim,
+                attempt_status="fetch_error",
+                completed_at=_utc_now(),
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+                max_attempts=max_attempts,
+                next_retry_at=(
+                    self._next_retry_at()
+                    if retryable
+                    else None
+                ),
+                retryable=retryable,
+                fetch_result=exc.fetch_result,
+            )
+
+            if retryable:
+                print(
+                    "Detail failed, will retry according "
+                    f"to state policy: {exc}"
+                )
+            else:
+                print(
+                    "Detail is permanently gone; removed "
+                    f"from retry queue: {exc}"
+                )
 
         except FetchError as exc:
             self.state.fail_attempt(

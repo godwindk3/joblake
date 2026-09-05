@@ -33,6 +33,7 @@ from joblake.browser_actions import (
 from joblake.models import (
     FetchError,
     FetchResult,
+    HttpStatusError,
     SourceBlockedError,
 )
 
@@ -64,6 +65,26 @@ class RetrySettings:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _http_status_error(
+    *,
+    requested_url: str,
+    final_url: str,
+    status_code: int,
+    content_type: str | None,
+    html: str,
+) -> HttpStatusError:
+    return HttpStatusError(
+        FetchResult(
+            requested_url=requested_url,
+            final_url=final_url,
+            status_code=status_code,
+            content_type=content_type,
+            fetched_at=_utc_now(),
+            html=html,
+        )
+    )
 
 
 def _load_retry_settings(config: dict) -> RetrySettings:
@@ -465,6 +486,17 @@ def _fetch_browser_page(
                     f"{page.url}"
                 )
 
+            if status_code == 410:
+                raise _http_status_error(
+                    requested_url=final_request_url,
+                    final_url=page.url,
+                    status_code=status_code,
+                    content_type=response_headers.get(
+                        "content-type"
+                    ),
+                    html=html,
+                )
+
             block_reason = _detect_block_reason(
                 status_code,
                 html,
@@ -493,18 +525,28 @@ def _fetch_browser_page(
                     )
                     continue
 
-                raise FetchError(
-                    f"HTTP status {status_code}: "
-                    f"{page.url}"
+                raise _http_status_error(
+                    requested_url=final_request_url,
+                    final_url=page.url,
+                    status_code=status_code,
+                    content_type=response_headers.get(
+                        "content-type"
+                    ),
+                    html=html,
                 )
 
             if (
                 status_code is not None
                 and status_code >= 400
             ):
-                raise FetchError(
-                    f"HTTP status {status_code}: "
-                    f"{page.url}"
+                raise _http_status_error(
+                    requested_url=final_request_url,
+                    final_url=page.url,
+                    status_code=status_code,
+                    content_type=response_headers.get(
+                        "content-type"
+                    ),
+                    html=html,
                 )
 
             _settle_page(page, config)
@@ -712,6 +754,19 @@ class RequestsFetcher:
                     f"{response.url}"
                 )
 
+            if response.status_code == 410:
+                raise _http_status_error(
+                    requested_url=(
+                        response.request.url or url
+                    ),
+                    final_url=response.url,
+                    status_code=response.status_code,
+                    content_type=response.headers.get(
+                        "content-type"
+                    ),
+                    html=html,
+                )
+
             block_reason = _detect_block_reason(
                 response.status_code,
                 html,
@@ -746,10 +801,16 @@ class RequestsFetcher:
                     continue
 
             if response.status_code >= 400:
-                raise FetchError(
-                    f"HTTP status "
-                    f"{response.status_code}: "
-                    f"{response.url}"
+                raise _http_status_error(
+                    requested_url=(
+                        response.request.url or url
+                    ),
+                    final_url=response.url,
+                    status_code=response.status_code,
+                    content_type=response.headers.get(
+                        "content-type"
+                    ),
+                    html=html,
                 )
 
             return FetchResult(

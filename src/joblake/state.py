@@ -350,6 +350,7 @@ class StateStore(Protocol):
         error_message: str,
         max_attempts: int,
         next_retry_at: str | None,
+        retryable: bool = True,
         fetch_result: FetchResult | None = None,
         validation: ValidationResult | None = None,
     ) -> None: ...
@@ -1026,12 +1027,16 @@ class SQLiteStateStore:
         error_message: str,
         max_attempts: int,
         next_retry_at: str | None,
+        retryable: bool = True,
         fetch_result: FetchResult | None = None,
         validation: ValidationResult | None = None,
     ) -> None:
         if attempt_status == "blocked":
             job_status = "blocked"
-        elif claim.attempt_number >= max_attempts:
+        elif (
+            not retryable
+            or claim.attempt_number >= max_attempts
+        ):
             job_status = "permanent_error"
             next_retry_at = None
         else:
