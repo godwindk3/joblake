@@ -3,6 +3,7 @@ source_adapter: joblake.sources.vietnamworks.VietnamWorksSource
 enabled: true
 
 discovery:
+  browser_flow: vietnamworks_pagination
   diagnostics_dir: data/state/diagnostics/vietnamworks/discovery
   diagnostics_capture_success: true
   transport: cloakbrowser

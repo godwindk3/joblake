@@ -1172,6 +1172,9 @@ class CloakBrowserFetcher:
 
 
 def create_fetcher(config: dict):
+    if config.get("browser_flow") == "vietnamworks_pagination":
+        from joblake.vietnamworks_browser import VietnamWorksDiscoveryFetcher
+        return VietnamWorksDiscoveryFetcher(config)
     transport = config["transport"]
 
     if transport == "requests":
