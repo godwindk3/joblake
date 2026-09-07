@@ -1,0 +1,10 @@
+**
+!pyproject.toml
+!requirements.txt
+!src/
+!src/**
+!orchestration/
+!orchestration/airflow/
+!orchestration/airflow/Dockerfile
+**/__pycache__/
+**/*.pyc

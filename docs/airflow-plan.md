@@ -1,5 +1,9 @@
 # Kế hoạch đưa Apache Airflow vào JobLake
 
+> Cập nhật 2026-09-07: tài liệu bên dưới ghi lại giai đoạn setup ban đầu.
+> Repo đã thêm DAG ITviec và runtime JobLake. Hướng dẫn hiện hành nằm ở
+> [Airflow ITviec](airflow-itviec.md). Supabase sync tự động được để sau bốn source.
+
 ## 1. Phạm vi hiện tại
 
 Giai đoạn này chỉ dựng **control plane Airflow độc lập** để đội dự án có

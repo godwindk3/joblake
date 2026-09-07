@@ -49,8 +49,9 @@ class IngestionPipeline:
         self.state = state or create_state_store(config)
         self.fetcher_factory = fetcher_factory
         self.parse_service_factory = parse_service_factory
+        self._detail_error_count = 0
 
-    def run(self, phase: str = "full") -> None:
+    def run(self, phase: str = "full") -> str:
         if phase not in {
             "full",
             "discovery",
@@ -84,8 +85,7 @@ class IngestionPipeline:
                 raise
 
         if phase == "parse":
-            self._run_parse_phase(run_id)
-            return
+            return self._run_parse_phase(run_id)
 
         if phase in {"full", "discovery"}:
             crawler = self._create_discovery_crawler(
@@ -116,7 +116,7 @@ class IngestionPipeline:
                     new_url_count=new_url_count,
                 )
                 print(f"Discovery stopped: {exc}")
-                return
+                return "blocked"
             except (
                 FetchError,
                 PaginationDetectionError,
@@ -135,7 +135,7 @@ class IngestionPipeline:
                     new_url_count=new_url_count,
                 )
                 print(f"Discovery failed: {exc}")
-                return
+                return "failed"
             except Exception as exc:
                 discovered_url_count = len(
                     crawler.run_records
@@ -181,7 +181,7 @@ class IngestionPipeline:
                     ),
                     new_url_count=new_url_count,
                 )
-                return
+                return run_status
 
         try:
             detail_status = self._run_details(run_id)
@@ -216,8 +216,9 @@ class IngestionPipeline:
             discovered_url_count=discovered_url_count,
             new_url_count=new_url_count,
         )
+        return run_status
 
-    def _run_parse_phase(self, run_id: int) -> None:
+    def _run_parse_phase(self, run_id: int) -> str:
         print("========== PHASE 3: PARSE ==========")
 
         try:
@@ -257,6 +258,7 @@ class IngestionPipeline:
             discovered_url_count=0,
             new_url_count=0,
         )
+        return "suspicious" if summary.has_failures else "completed"
 
     def _create_discovery_crawler(
         self,
@@ -272,6 +274,7 @@ class IngestionPipeline:
         )
 
     def _run_details(self, run_id: int) -> str:
+        self._detail_error_count = 0
         print("========== PHASE 2: DETAIL ==========")
         detail_config = self.config["detail"]
         state_config = self.config["state"]
@@ -327,8 +330,8 @@ class IngestionPipeline:
 
                 self._sleep(detail_config["delay"])
 
-        print(f"Detail attempts this run: {processed}")
-        return "completed"
+        print(f"Detail attempts this run: {processed}; errors={self._detail_error_count}")
+        return "suspicious" if self._detail_error_count else "completed"
 
     def _crawl_detail(
         self,
@@ -356,6 +359,7 @@ class IngestionPipeline:
             )
 
             if not validation.is_valid:
+                self._detail_error_count += 1
                 self.state.fail_attempt(
                     claim=claim,
                     attempt_status="invalid_response",
@@ -428,6 +432,8 @@ class IngestionPipeline:
 
         except HttpStatusError as exc:
             retryable = exc.status_code != 410
+            if retryable:
+                self._detail_error_count += 1
             self.state.fail_attempt(
                 claim=claim,
                 attempt_status="fetch_error",
@@ -456,6 +462,7 @@ class IngestionPipeline:
                 )
 
         except FetchError as exc:
+            self._detail_error_count += 1
             self.state.fail_attempt(
                 claim=claim,
                 attempt_status="fetch_error",
@@ -472,6 +479,7 @@ class IngestionPipeline:
 
         except Exception as exc:
             self.state.fail_attempt(
+                # Record-level failures remain restartable, but visible to --strict.
                 claim=claim,
                 attempt_status="storage_error",
                 completed_at=_utc_now(),
@@ -486,6 +494,7 @@ class IngestionPipeline:
                 "Detail processing failed, will retry "
                 f"according to state policy: {exc}"
             )
+            self._detail_error_count += 1
 
         return True
 
@@ -643,9 +652,9 @@ class IngestionPipeline:
 def run_pipeline(
     config_path: str,
     phase: str = "full",
-) -> None:
+) -> str:
     from joblake.config import load_config
 
-    IngestionPipeline(
+    return IngestionPipeline(
         load_config(config_path)
     ).run(phase=phase)

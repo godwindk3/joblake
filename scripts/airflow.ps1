@@ -5,6 +5,7 @@ param(
         "help",
         "config",
         "pull",
+        "build",
         "init",
         "start",
         "stop",
@@ -34,7 +35,8 @@ Usage:
 
 Actions:
   config   Validate and print the resolved Docker Compose configuration.
-  pull     Pull the PostgreSQL and Airflow images.
+  pull     Pull metadata PostgreSQL; build pulls the Airflow base image.
+  build    Build the JobLake runtime image (also after dependency changes).
   init     Run Airflow metadata database migrations.
   start    Create and start all Airflow services in the background.
   stop     Stop containers without removing them.
@@ -51,6 +53,7 @@ Options:
 First-time setup:
   .\scripts\airflow.ps1 config
   .\scripts\airflow.ps1 pull
+  .\scripts\airflow.ps1 build
   .\scripts\airflow.ps1 init
   .\scripts\airflow.ps1 start
 
@@ -99,7 +102,10 @@ switch ($Action) {
         Invoke-AirflowCompose -CommandArguments @("config")
     }
     "pull" {
-        Invoke-AirflowCompose -CommandArguments @("pull")
+        Invoke-AirflowCompose -CommandArguments @("pull", "airflow-postgres")
+    }
+    "build" {
+        Invoke-AirflowCompose -CommandArguments @("build", "airflow-scheduler")
     }
     "init" {
         Invoke-AirflowCompose -CommandArguments @("up", "airflow-init")

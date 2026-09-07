@@ -42,11 +42,21 @@ alembic upgrade head
 separate, restartable step that reads existing raw HTML from MinIO; it
 does not contact the source website.
 
-## Airflow control plane (setup only)
+## Airflow source pipelines
 
-The repository includes an isolated Apache Airflow local environment at
-`orchestration/airflow`. It currently contains no JobLake DAG and has no
-connection to the crawler, MinIO, or the curated PostgreSQL database.
+The local Airflow environment includes four manual DAGs: `joblake_itviec`,
+`joblake_vietnamworks`, `joblake_topdev`, and `joblake_topcv`. Each runs
+`discovery -> detail -> parse`. Tasks call the existing CLI with `--strict`,
+read the mounted YAML at startup, and share the existing SQLite/MinIO/PostgreSQL
+data. Supabase sync remains a separate manual CLI operation covering all sources.
+
+All four share the one-slot `joblake_serial` pool. New DAGs start paused;
+unpause and trigger the desired source in the UI. No image rebuild is needed
+for DAG or YAML changes.
+
+See [four-source Airflow operation](docs/airflow-sources.md) for configs and
+run limits. See [Airflow setup and operation](docs/airflow-itviec.md) for build,
+initialization, validation, triggering, and rerun instructions.
 
 See [the Airflow plan](docs/airflow-plan.md) for setup commands, design
 decisions, integration boundaries, and the staged adoption roadmap.

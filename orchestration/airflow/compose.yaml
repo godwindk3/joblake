@@ -1,7 +1,15 @@
 name: joblake-airflow
 
 x-airflow-common: &airflow-common
-  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.3.1}
+  image: joblake-airflow:local
+  build:
+    context: ../..
+    dockerfile: orchestration/airflow/Dockerfile
+    args:
+      AIRFLOW_BASE_IMAGE: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.3.1}
+  shm_size: "1gb"
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   environment:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD:-airflow-dev-only}@airflow-postgres:5432/${AIRFLOW_DB_NAME:-airflow}
@@ -14,12 +22,21 @@ x-airflow-common: &airflow-common
     AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-joblake-airflow-jwt-dev-only}
     AIRFLOW__API_AUTH__JWT_ISSUER: joblake-airflow
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+    # Root .env supplies credentials and the host-published PostgreSQL port.
+    # Override only addresses: localhost inside Docker is the task container.
+    MINIO_ENDPOINT: ${JOBLAKE_MINIO_ENDPOINT:-host.docker.internal:9000}
+    POSTGRES_HOST: ${JOBLAKE_POSTGRES_HOST:-host.docker.internal}
   user: "${AIRFLOW_UID:-50000}:0"
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./config:/opt/airflow/config
     - ./plugins:/opt/airflow/plugins
+    - ../../src:/opt/joblake/src:ro
+    - ../../configs:/opt/joblake/configs:ro
+    - ../../data/state:/opt/joblake/data/state
+    - ../../.env:/opt/joblake/.env:ro
+    - ./check_dag.py:/opt/airflow/check_dag.py:ro
   depends_on:
     airflow-postgres:
       condition: service_healthy
@@ -45,7 +62,10 @@ services:
 
   airflow-init:
     <<: *airflow-common
-    command: db migrate
+    command:
+      - bash
+      - -c
+      - airflow db migrate && airflow pools set joblake_serial 1 'One JobLake task at a time'
     restart: "no"
 
   airflow-api-server:

@@ -5,6 +5,7 @@ param(
         "help",
         "config",
         "pull",
+        "build",
         "init",
         "start",
         "stop",
@@ -46,6 +47,7 @@ Scopes:
 Actions:
   config    Validate and print resolved Compose configuration.
   pull      Pull all required images.
+  build     Build the JobLake Airflow runtime image.
   init      Start core services and migrate the Airflow metadata database.
   start     Create and start services in the background.
   stop      Stop containers without removing them.
@@ -154,7 +156,17 @@ switch ($Action) {
     }
     "pull" {
         foreach ($stack in $stacks) {
-            Invoke-Compose -Stack $stack -CommandArguments @("pull")
+            if ($stack -eq "airflow") {
+                Invoke-Compose -Stack $stack -CommandArguments @("pull", "airflow-postgres")
+            }
+            else {
+                Invoke-Compose -Stack $stack -CommandArguments @("pull")
+            }
+        }
+    }
+    "build" {
+        if ($Scope -in @("all", "airflow")) {
+            Invoke-Compose -Stack "airflow" -CommandArguments @("build", "airflow-scheduler")
         }
     }
     "init" {
