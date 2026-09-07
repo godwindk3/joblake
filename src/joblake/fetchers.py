@@ -474,7 +474,7 @@ def _fetch_browser_page(
     ):
         stage = "navigation"
         status_code = None
-        diagnostics = BrowserDiagnostics(page, config.get("diagnostics_dir"))
+        diagnostics = BrowserDiagnostics.from_config(page, config)
         try:
             goto_options = {
                 "wait_until": "domcontentloaded",
@@ -665,6 +665,8 @@ def _fetch_browser_page(
             ) from exc
 
         except PlaywrightError as exc:
+            diagnostics.capture(outcome="error", stage=stage, attempt=attempt,
+                                requested_url=final_request_url, error=str(exc))
             if _should_retry(
                 attempt,
                 retry_settings,
@@ -699,6 +701,11 @@ def _fetch_browser_page(
                 f"attempt(s): {final_request_url}: "
                 f"{exc}"
             ) from exc
+
+        except (SourceBlockedError, HttpStatusError) as exc:
+            diagnostics.capture(outcome="error", stage=stage, attempt=attempt,
+                                requested_url=final_request_url, error=str(exc))
+            raise
 
         finally:
             diagnostics.close()

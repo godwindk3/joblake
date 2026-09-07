@@ -1,3 +1,4 @@
+import logging
 import random
 import time
 from datetime import datetime, timedelta, timezone
@@ -20,6 +21,9 @@ from joblake.storage import (
     RawStorage,
     create_raw_storage,
 )
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _utc_now() -> str:
@@ -67,6 +71,7 @@ class IngestionPipeline:
             self.source.name,
             _utc_now(),
         )
+        LOGGER.info("Run started: run_id=%s source=%s phase=%s", run_id, self.source.name, phase)
         crawler: DiscoveryCrawler | None = None
         discovered_url_count = 0
         new_url_count = 0
@@ -93,7 +98,7 @@ class IngestionPipeline:
             )
 
             try:
-                print(
+                LOGGER.info(
                     "========== PHASE 1: DISCOVERY =========="
                 )
                 crawler.run()
@@ -115,7 +120,7 @@ class IngestionPipeline:
                     ),
                     new_url_count=new_url_count,
                 )
-                print(f"Discovery stopped: {exc}")
+                LOGGER.warning(f"Discovery stopped: {exc}")
                 return "blocked"
             except (
                 FetchError,
@@ -134,7 +139,7 @@ class IngestionPipeline:
                     ),
                     new_url_count=new_url_count,
                 )
-                print(f"Discovery failed: {exc}")
+                LOGGER.error(f"Discovery failed: {exc}")
                 return "failed"
             except Exception as exc:
                 discovered_url_count = len(
@@ -157,7 +162,7 @@ class IngestionPipeline:
                 if crawler.has_failed_targets
                 else "completed"
             )
-            print(
+            LOGGER.info(
                 f"Discovery {discovery_result}: "
                 f"{discovered_url_count} unique jobs, "
                 f"{new_url_count} new"
@@ -219,7 +224,7 @@ class IngestionPipeline:
         return run_status
 
     def _run_parse_phase(self, run_id: int) -> str:
-        print("========== PHASE 3: PARSE ==========")
+        LOGGER.info("========== PHASE 3: PARSE ==========")
 
         try:
             if self.parse_service_factory is None:
@@ -275,7 +280,7 @@ class IngestionPipeline:
 
     def _run_details(self, run_id: int) -> str:
         self._detail_error_count = 0
-        print("========== PHASE 2: DETAIL ==========")
+        LOGGER.info("========== PHASE 2: DETAIL ==========")
         detail_config = self.config["detail"]
         state_config = self.config["state"]
         max_jobs = detail_config.get("max_jobs_per_run")
@@ -311,7 +316,7 @@ class IngestionPipeline:
                     break
 
                 processed += 1
-                print(
+                LOGGER.debug(
                     f"Detail {processed}"
                     + (
                         f"/{max_jobs}"
@@ -330,7 +335,11 @@ class IngestionPipeline:
 
                 self._sleep(detail_config["delay"])
 
-        print(f"Detail attempts this run: {processed}; errors={self._detail_error_count}")
+                if processed % 100 == 0:
+                    LOGGER.info("Detail progress: run_id=%s source=%s processed=%s errors=%s",
+                                run_id, self.source.name, processed, self._detail_error_count)
+
+        LOGGER.info(f"Detail attempts this run: {processed}; errors={self._detail_error_count}")
         return "suspicious" if self._detail_error_count else "completed"
 
     def _crawl_detail(
@@ -373,7 +382,7 @@ class IngestionPipeline:
                     fetch_result=fetch_result,
                     validation=validation,
                 )
-                print(
+                LOGGER.warning(
                     "Detail raw validation failed: "
                     + ", ".join(validation.errors)
                 )
@@ -411,7 +420,7 @@ class IngestionPipeline:
                 completed_at=_utc_now(),
             )
 
-            print(
+            LOGGER.debug(
                 "Raw detail ready: "
                 f"{stored.locator.bucket_name}/"
                 f"{stored.locator.object_key}"
@@ -427,7 +436,7 @@ class IngestionPipeline:
                 max_attempts=max_attempts,
                 next_retry_at=self._next_retry_at(),
             )
-            print(f"Detail crawling blocked: {exc}")
+            LOGGER.warning(f"Detail crawling blocked: {exc}")
             return False
 
         except HttpStatusError as exc:
@@ -451,12 +460,12 @@ class IngestionPipeline:
             )
 
             if retryable:
-                print(
+                LOGGER.warning(
                     "Detail failed, will retry according "
                     f"to state policy: {exc}"
                 )
             else:
-                print(
+                LOGGER.warning(
                     "Detail is permanently gone; removed "
                     f"from retry queue: {exc}"
                 )
@@ -472,7 +481,7 @@ class IngestionPipeline:
                 max_attempts=max_attempts,
                 next_retry_at=self._next_retry_at(),
             )
-            print(
+            LOGGER.warning(
                 "Detail failed, will retry according "
                 f"to state policy: {exc}"
             )
@@ -490,7 +499,7 @@ class IngestionPipeline:
                 fetch_result=fetch_result,
                 validation=validation,
             )
-            print(
+            LOGGER.exception(
                 "Detail processing failed, will retry "
                 f"according to state policy: {exc}"
             )
@@ -521,7 +530,7 @@ class IngestionPipeline:
                     stored,
                     now,
                 )
-                print(
+                LOGGER.info(
                     "Recovered completed upload: "
                     f"{pending.locator.object_key}"
                 )
@@ -600,7 +609,7 @@ class IngestionPipeline:
             )
 
         if checks:
-            print(
+            LOGGER.info(
                 "Raw integrity audit: "
                 f"checked={len(checks)}, "
                 f"failed={failed_count}"

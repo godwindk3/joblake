@@ -1,3 +1,4 @@
+import logging
 import random
 import time
 from dataclasses import dataclass
@@ -20,6 +21,9 @@ from joblake.storage import (
     RawStorage,
     create_raw_storage,
 )
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _utc_now() -> str:
@@ -129,7 +133,7 @@ class DiscoveryCrawler:
                     if not continue_on_target_error:
                         raise
 
-                    print(
+                    LOGGER.warning(
                         "Discovery target failed; "
                         "continuing with the next target: "
                         f"{target['name']} ({exc})"
@@ -256,7 +260,7 @@ class DiscoveryCrawler:
         target_name = target["name"]
         delay = discovery_config["delay"]
 
-        print(f"Starting target: {target_name}")
+        LOGGER.info(f"Starting target: {target_name}")
 
         configured_total_pages = self._configured_total_pages(
             target,
@@ -357,7 +361,7 @@ class DiscoveryCrawler:
                 f"above max_auto_pages={max_auto_pages}."
             )
 
-        print(
+        LOGGER.info(
             f"Target={target_name}, auto-pagination: "
             f"last_page={last_page}, pages={page_count}"
         )
@@ -435,7 +439,7 @@ class DiscoveryCrawler:
         consecutive_stale_pages = 0
         last_useful_page: int | None = None
 
-        print(
+        LOGGER.info(
             f"Target={target['name']}, auto-pagination: "
             "strategy=until_empty, "
             f"max_pages={max_auto_pages}"
@@ -482,7 +486,7 @@ class DiscoveryCrawler:
                 progress.detected_last_page = (
                     last_useful_page
                 )
-                print(
+                LOGGER.info(
                     f"Target={target['name']}, stopped "
                     f"after {consecutive_empty_pages} "
                     "empty page(s); "
@@ -499,7 +503,7 @@ class DiscoveryCrawler:
                 progress.detected_last_page = (
                     last_useful_page
                 )
-                print(
+                LOGGER.info(
                     f"Target={target['name']}, stopped "
                     f"after {consecutive_stale_pages} "
                     "page(s) without new URLs; "
@@ -509,7 +513,7 @@ class DiscoveryCrawler:
 
         progress.detected_last_page = last_useful_page
         progress.reached_page_limit = True
-        print(
+        LOGGER.warning(
             f"Target={target['name']}, reached "
             f"max_auto_pages={max_auto_pages} "
             "without a terminal page"
@@ -585,7 +589,7 @@ class DiscoveryCrawler:
 
         self.new_job_count += persisted_new_count
 
-        print(
+        LOGGER.debug(
             f"Target={request.target_name}, "
             f"page={request.page_number}, "
             f"found={len(page_urls)}, "

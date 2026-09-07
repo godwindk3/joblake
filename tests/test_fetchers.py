@@ -208,7 +208,7 @@ class BrowserFetcherTests(unittest.TestCase):
         page = Mock()
         page.content.return_value = "<html></html>"
         with tempfile.TemporaryDirectory() as directory:
-            success = BrowserDiagnostics(page, directory)
+            success = BrowserDiagnostics(page, directory, capture_success=True)
             request = Mock(url="https://example.com/search", method="POST", resource_type="xhr")
             success._request(request)
             success.capture(outcome="success", requested_url="https://example.com/jobs?page=1")
@@ -237,7 +237,7 @@ class BrowserFetcherTests(unittest.TestCase):
             for request in (waiting, receiving, done):
                 diagnostics._request(request)
             diagnostics._response(Mock(request=receiving, status=200))
-            response = Mock(request=done, status=200, headers={"content-type": "application/json"})
+            response = Mock(request=done, status=200, headers={"content-type": "application/json", "content-length": "43"})
             response.body.return_value = b'{"error":"quota exceeded","token":"secret"}'
             done.response.return_value = response
             diagnostics._response(response)

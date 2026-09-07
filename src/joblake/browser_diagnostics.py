@@ -30,9 +30,27 @@ def _safe_url(url):
 
 
 class BrowserDiagnostics:
-    def __init__(self, page, directory):
+    @classmethod
+    def from_config(cls, page, config):
+        return cls(
+            page, config.get("diagnostics_dir"),
+            enabled=config.get("diagnostics_enabled", True),
+            capture_success=config.get("diagnostics_capture_success", False),
+            retention_days=config.get("diagnostics_retention_days", 7),
+            max_captures=config.get("diagnostics_max_captures", 100),
+        )
+
+    def __init__(self, page, directory, *, enabled=True, capture_success=False,
+                 retention_days=7, max_captures=100):
+        if isinstance(retention_days, bool) or not isinstance(retention_days, (int, float)) or not 0 < retention_days <= 3650:
+            raise ValueError("diagnostics_retention_days must be between 0 and 3650 (exclusive of 0)")
+        if isinstance(max_captures, bool) or not isinstance(max_captures, int) or max_captures < 1:
+            raise ValueError("diagnostics_max_captures must be a positive integer")
         self.page = page
-        self.directory = directory
+        self.directory = directory if enabled else None
+        self.capture_success = capture_success
+        self.retention_days = retention_days
+        self.max_captures = max_captures
         self.events = deque(maxlen=50)
         self.console_events = deque(maxlen=50)
         self.listeners = []
@@ -40,7 +58,8 @@ class BrowserDiagnostics:
         self.requests = {}
         self.completed = deque(maxlen=30)
         self.dropped_requests = 0
-        if directory:
+        if self.directory:
+            self._cleanup()
             for event, callback in (
                 ("request", self._request),
                 ("requestfinished", self._finished),
@@ -51,6 +70,43 @@ class BrowserDiagnostics:
             ):
                 page.on(event, callback)
                 self.listeners.append((event, callback))
+
+    def _cleanup(self, reserve=0):
+        """Remove only our flat evidence folders, never recurse into user data."""
+        root = Path(self.directory).resolve()
+        if not root.is_dir():
+            return
+        removed = 0
+        try:
+            captures = []
+            for folder in root.iterdir():
+                if (re.fullmatch(r"\d{8}T\d{6}-[0-9a-f]{12}", folder.name)
+                        and not folder.is_symlink() and folder.is_dir()
+                        and folder.resolve().parent == root):
+                    captures.append(folder)
+            captures.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            cutoff = time.time() - self.retention_days * 86400
+            for index, folder in enumerate(captures):
+                if index < self.max_captures - reserve and folder.stat().st_mtime >= cutoff:
+                    continue
+                children = list(folder.iterdir())
+                if any(p.name not in {"page.html", "page.png", "diagnostics.json"}
+                       or p.is_symlink() or not p.is_file()
+                       or p.resolve().parent != folder.resolve() for p in children):
+                    continue
+                for child in children:
+                    child.unlink()
+                folder.rmdir()
+                removed += 1
+            baseline = root / "latest_success.json"
+            if baseline.is_file() and not baseline.is_symlink():
+                previous = json.loads(baseline.read_text(encoding="utf-8"))
+                if baseline.stat().st_mtime < cutoff or not Path(previous.get("file", "")).is_file():
+                    baseline.unlink()
+        except (OSError, ValueError, TypeError):
+            LOGGER.warning("Unable to prune browser diagnostics in %s", root, exc_info=True)
+        if removed:
+            LOGGER.info("Pruned %s expired/excess browser evidence folders in %s", removed, root)
 
     def _request(self, request):
         if request.resource_type not in {"xhr", "fetch", "document", "script"}:
@@ -104,9 +160,10 @@ class BrowserDiagnostics:
                                         "at_ms": round((time.perf_counter()-self.started)*1000)})
 
     def capture(self, **metadata):
-        if not self.directory:
+        if not self.directory or (metadata.get("outcome") == "success" and not self.capture_success):
             return
         try:
+            self._cleanup(reserve=1)
             stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
             folder = Path(self.directory) / f"{stamp}-{uuid4().hex[:12]}"
             folder.mkdir(parents=True, exist_ok=False)
@@ -130,8 +187,10 @@ class BrowserDiagnostics:
                     content_type = headers.get("content-type", "")
                     if "json" not in content_type:
                         continue
-                    if int(headers.get("content-length", "0")) > 262144:
-                        entry["body_omitted"] = "Content-Length exceeds 256 KiB"
+                    if not 0 < int(headers.get("content-length", "0")) <= 262144:
+                        entry["body_omitted"] = "Unknown or excessive Content-Length"
+                    elif headers.get("content-encoding", "identity") != "identity":
+                        entry["body_omitted"] = "Compressed body may exceed size limit"
                     else:
                         body = response.body()
                         if len(body) > 262144:
@@ -191,3 +250,9 @@ class BrowserDiagnostics:
                 self.page.remove_listener(event, callback)
             except Exception:
                 pass
+        self.listeners.clear()
+        self.requests.clear()
+        self.completed.clear()
+        self.events.clear()
+        self.console_events.clear()
+        self.page = None

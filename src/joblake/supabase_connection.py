@@ -3,22 +3,27 @@
 
 from __future__ import annotations
 
+import logging
 import os
-import sys
 
 import psycopg
 from dotenv import load_dotenv
 
+from joblake.logging import configure_logging
+
+
+LOGGER = logging.getLogger(__name__)
+
 
 def main() -> int:
+    configure_logging()
     load_dotenv()
     database_url = os.environ.get("SUPABASE_DATABASE_URL")
 
     if not database_url:
-        print(
+        LOGGER.error(
             "FAIL: SUPABASE_DATABASE_URL is not set. "
             "Add it to your untracked .env file.",
-            file=sys.stderr,
         )
         return 2
 
@@ -30,17 +35,16 @@ def main() -> int:
                 cursor.execute("SELECT current_database(), current_schema()")
                 database_name, schema_name = cursor.fetchone()
     except psycopg.Error as exc:
-        print(
+        LOGGER.error(
             "FAIL: could not connect to Supabase PostgreSQL: "
             f"{exc.__class__.__name__} (check endpoint, network and credentials)",
-            file=sys.stderr,
         )
         return 1
 
-    print("SUCCESS: connected to Supabase PostgreSQL (read-only check).")
-    print(f"Database: {database_name}")
-    print(f"Current schema: {schema_name}")
-    print(f"Server: {version}")
+    LOGGER.info("SUCCESS: connected to Supabase PostgreSQL (read-only check).")
+    LOGGER.info(f"Database: {database_name}")
+    LOGGER.info(f"Current schema: {schema_name}")
+    LOGGER.info(f"Server: {version}")
     return 0
 
 

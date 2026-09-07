@@ -1,11 +1,16 @@
 """Small one-way sync for the existing ID-preserving JobLake replica."""
+import logging
 import os
-import sys
 
 import psycopg
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 from psycopg.types.json import Jsonb
+
+from joblake.logging import configure_logging
+
+
+LOGGER = logging.getLogger(__name__)
 
 TABLES = (
     ("ref", "sources", ("code",)),
@@ -27,9 +32,10 @@ def configure():
 
 
 def sync(*, dry_run=False):
+    configure_logging()
     configure()
     if not all(os.getenv(k) for k in ("LOCAL_DATABASE_URL", "SUPABASE_DATABASE_URL")):
-        print("FAIL: configure local PostgreSQL and SUPABASE_DATABASE_URL", file=sys.stderr)
+        LOGGER.error("FAIL: configure local PostgreSQL and SUPABASE_DATABASE_URL")
         return 2
     try:
         with psycopg.connect(os.environ["LOCAL_DATABASE_URL"], connect_timeout=10) as local, psycopg.connect(os.environ["SUPABASE_DATABASE_URL"], connect_timeout=10) as remote:
@@ -60,10 +66,10 @@ def sync(*, dry_run=False):
                             remote.execute(query, params)
                             count += 1
                         records = reader.fetchmany(200)
-                    print(f"{schema}.{table}: {count} rows processed")
+                    LOGGER.info(f"{schema}.{table}: {count} rows processed")
             if dry_run:
                 remote.rollback()
-                print("SUCCESS: dry run rolled back; no rows saved")
+                LOGGER.info("SUCCESS: dry run rolled back; no rows saved")
             else:
                 # ALTER SEQUENCE RESTART is transactional, unlike setval.
                 for schema, table, _ in TABLES:
@@ -72,9 +78,9 @@ def sync(*, dry_run=False):
                     maximum = remote.execute(sql.SQL('SELECT max(id) FROM {}').format(sql.Identifier(schema, table))).fetchone()[0] or 0
                     next_id = max(last + int(called), maximum + 1)
                     remote.execute(sql.SQL('ALTER SEQUENCE {} RESTART WITH {}').format(sql.Identifier(schema, seq), sql.Literal(next_id)))
-                print("Sync transaction ready to commit")
-        print("SUCCESS: sync completed")
+                LOGGER.info("Sync transaction ready to commit")
+        LOGGER.info("SUCCESS: sync completed")
         return 0
     except (psycopg.Error, ValueError) as exc:
-        print(f"FAIL: sync rolled back ({type(exc).__name__}); check connectivity, schema and ID/key conflicts", file=sys.stderr)
+        LOGGER.error(f"FAIL: sync rolled back ({type(exc).__name__}); check connectivity, schema and ID/key conflicts")
         return 1

@@ -8,15 +8,20 @@ Only ``core`` and ``ref`` are included.  The utility deliberately does not use
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
 import psycopg
 from dotenv import load_dotenv
+
+from joblake.logging import configure_logging
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 DEFAULT_SCHEMAS = ("ref", "core")
@@ -78,7 +83,7 @@ def run(command: list[str]) -> None:
             if password is not None:
                 environment["PGPASSWORD"] = password
             command[index] = "--dbname=" + make_conninfo(**settings)
-    print("Running:", " ".join(command[:1] + ["<connection URLs redacted>"]))
+    LOGGER.info("Running: %s", " ".join(command[:1] + ["<connection URLs redacted>"]))
     subprocess.run(command, check=True, env=environment)
 
 
@@ -104,11 +109,12 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 
 def main(argv=None) -> int:
+    configure_logging()
     load_dotenv()
     args = parse_args(argv)
     schemas = tuple(args.schemas or DEFAULT_SCHEMAS)
     if not schemas or set(schemas) != set(DEFAULT_SCHEMAS):
-        print("FAIL: migrate exactly ref and core together to preserve dependencies.", file=sys.stderr)
+        LOGGER.error("FAIL: migrate exactly ref and core together to preserve dependencies.")
         return 2
 
     try:
@@ -118,7 +124,7 @@ def main(argv=None) -> int:
         pg_dump = find_postgres_tool("pg_dump")
         pg_restore = find_postgres_tool("pg_restore")
         if args.preflight_only:
-            print("SUCCESS: preflight passed; destination application schemas do not exist.")
+            LOGGER.info("SUCCESS: preflight passed; destination application schemas do not exist.")
             return 0
 
         with tempfile.NamedTemporaryFile(
@@ -146,19 +152,19 @@ def main(argv=None) -> int:
                 "--verbose",
                 str(dump_path),
             ]
-            print(f"Dumping only application schemas: {', '.join(schemas)}")
+            LOGGER.info(f"Dumping only application schemas: {', '.join(schemas)}")
             run(dump_command)
-            print("Restoring without ownership, privileges, or destructive cleanup.")
+            LOGGER.info("Restoring without ownership, privileges, or destructive cleanup.")
             run(restore_command)
         finally:
             if args.keep_dump:
-                print(f"Temporary dump retained at: {dump_path}")
+                LOGGER.info(f"Temporary dump retained at: {dump_path}")
             elif 'dump_path' in locals() and dump_path.exists():
                 dump_path.unlink()
-        print("SUCCESS: restore completed. Run verify_supabase_migration.py next.")
+        LOGGER.info("SUCCESS: restore completed. Run verify_supabase_migration.py next.")
         return 0
     except (OSError, RuntimeError, ValueError, psycopg.Error, subprocess.CalledProcessError) as exc:
-        print(f"FAIL: migration did not complete ({type(exc).__name__}).", file=sys.stderr)
+        LOGGER.error(f"FAIL: migration did not complete ({type(exc).__name__}).")
         return 1
 
 

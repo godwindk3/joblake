@@ -4,15 +4,19 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
-import sys
 from dataclasses import dataclass
 from typing import Any
 
 import psycopg
 from dotenv import load_dotenv
 
+from joblake.logging import configure_logging
+
+
+LOGGER = logging.getLogger(__name__)
 
 APP_SCHEMAS = ("ref", "core")
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -208,11 +212,12 @@ def sequence_last_value(
 
 
 def main() -> int:
+    configure_logging()
     load_dotenv()
     local_url = os.environ.get("LOCAL_DATABASE_URL")
     remote_url = os.environ.get("SUPABASE_DATABASE_URL")
     if not local_url or not remote_url:
-        print("FAIL: LOCAL_DATABASE_URL and SUPABASE_DATABASE_URL are both required.", file=sys.stderr)
+        LOGGER.error("FAIL: LOCAL_DATABASE_URL and SUPABASE_DATABASE_URL are both required.")
         return 2
 
     failures: list[str] = []
@@ -227,11 +232,11 @@ def main() -> int:
                     f"table sets differ: local={local_tables}, supabase={remote_tables}"
                 )
             tables = sorted(set(local_tables) & set(remote_tables))
-            print("schema.table | local rows | Supabase rows | local id range | Supabase id range")
-            print("-" * 88)
+            LOGGER.info("schema.table | local rows | Supabase rows | local id range | Supabase id range")
+            LOGGER.info("-" * 88)
             for schema, table in tables:
                 comparison = compare_table(local, remote, schema, table)
-                print(
+                LOGGER.info(
                     f"{schema}.{table} | {comparison.local_count} | {comparison.remote_count} | "
                     f"{comparison.local_min_id}..{comparison.local_max_id} | "
                     f"{comparison.remote_min_id}..{comparison.remote_max_id}"
@@ -269,22 +274,22 @@ def main() -> int:
                     and remote_sequence < comparison.remote_max_id
                 ):
                     failures.append(f"Supabase sequence is behind max(id) for {schema}.{table}")
-                print(
+                LOGGER.info(
                     f"  nulls local={local_nulls} Supabase={remote_nulls}; "
                     f"sequence local={local_sequence} Supabase={remote_sequence}; "
                     f"non-ASCII rows local={local_non_ascii} Supabase={remote_non_ascii}; "
                     "constraints/indexes compared"
                 )
     except psycopg.Error as exc:
-        print(f"FAIL: verification query failed ({type(exc).__name__}).", file=sys.stderr)
+        LOGGER.error(f"FAIL: verification query failed ({type(exc).__name__}).")
         return 1
 
     if failures:
-        print("FAIL: migration verification found:", file=sys.stderr)
+        LOGGER.error("FAIL: migration verification found:")
         for failure in failures:
-            print(f"- {failure}", file=sys.stderr)
+            LOGGER.error(f"- {failure}")
         return 1
-    print(
+    LOGGER.info(
         "SUCCESS: all checked table counts, ID ranges, null counts, unique keys, "
         "constraints, indexes, samples, and sequences match."
     )

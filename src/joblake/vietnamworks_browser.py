@@ -2,7 +2,7 @@
 
 import logging
 
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 
 from joblake.browser_diagnostics import BrowserDiagnostics
 from joblake.fetchers import (
@@ -32,7 +32,7 @@ class VietnamWorksDiscoveryFetcher(CloakBrowserFetcher):
         timeout = self.config["timeout_seconds"] * 1000
         selector = self.config["ready_selector"]
         for attempt in range(1, self.retry_settings.max_attempts + 1):
-            diagnostics = BrowserDiagnostics(self.page, self.config.get("diagnostics_dir"))
+            diagnostics = BrowserDiagnostics.from_config(self.page, self.config)
             stage = "navigation"
             try:
                 if self.last_page_number is None:
@@ -108,5 +108,9 @@ class VietnamWorksDiscoveryFetcher(CloakBrowserFetcher):
                     raise FetchError(f"VietnamWorks timeout: stage={stage}; {requested}; {exc}") from exc
                 _sleep_before_retry(attempt=attempt, settings=self.retry_settings,
                                     url=requested, reason=f"VietnamWorks {stage}")
+            except (FetchError, SourceBlockedError, PlaywrightError) as exc:
+                diagnostics.capture(outcome="error", stage=stage, attempt=attempt,
+                                    requested_url=requested, error=str(exc))
+                raise
             finally:
                 diagnostics.close()

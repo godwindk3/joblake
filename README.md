@@ -42,6 +42,29 @@ alembic upgrade head
 separate, restartable step that reads existing raw HTML from MinIO; it
 does not contact the source website.
 
+## Logging
+
+Browser evidence controls and storage growth review:
+[Diagnostics and storage](docs/diagnostics-and-storage.md).
+
+JobLake uses standard Python logging to stderr with UTC timestamps, levels
+and module names. The default `INFO` level shows phase summaries, target
+progress and detail progress every 100 attempts. Per-job success and
+per-page discovery messages use `DEBUG`:
+
+```powershell
+python -m joblake.main --config configs/itviec.yaml --phase detail --log-level DEBUG
+```
+
+Run-start messages include the SQLite run ID, source and phase. Unexpected
+detail processing errors and caught parse exceptions include tracebacks.
+Standalone Supabase commands share the console configuration and retain
+their existing credential-safe error messages.
+
+Airflow collects stderr through BashOperator. Its outer log level may
+remain `INFO`; the JobLake level appears in the message. Task logs stay in
+`orchestration/airflow/logs`; JobLake adds no file handler or retention job.
+
 ## Airflow source pipelines
 
 The local Airflow environment includes four manual DAGs: `joblake_itviec`,

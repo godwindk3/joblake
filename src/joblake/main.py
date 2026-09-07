@@ -1,8 +1,13 @@
 import argparse
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+from joblake.logging import configure_logging
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def main() -> None:
@@ -39,7 +44,13 @@ def main() -> None:
         "--strict", action="store_true",
         help="Exit nonzero for blocked, failed or suspicious ingestion runs (for schedulers)",
     )
+    parser.add_argument(
+        "--log-level", type=str.upper,
+        choices=("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"),
+        default="INFO", help="Logging verbosity (default: INFO)",
+    )
     args = parser.parse_args()
+    configure_logging(args.log_level)
     if args.preflight_only and args.phase != "supabase-migrate":
         parser.error("--preflight-only requires supabase-migrate")
     if args.dry_run and args.phase != "supabase-sync":
@@ -63,7 +74,11 @@ def main() -> None:
 
     from joblake.pipeline import run_pipeline
     status = run_pipeline(args.config, phase=args.phase)
-    print(f"Ingestion result: source_config={args.config} phase={args.phase} status={status}")
+    LOGGER.log(
+        logging.INFO if status == "completed" else logging.WARNING,
+        "Ingestion result: source_config=%s phase=%s status=%s",
+        args.config, args.phase, status,
+    )
     if args.strict and status != "completed":
         raise SystemExit(1)
 
