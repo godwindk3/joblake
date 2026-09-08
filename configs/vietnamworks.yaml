@@ -119,8 +119,8 @@ detail:
   max_jobs_per_run: null
 
   delay:
-    min_seconds: 6
-    max_seconds: 13
+    min_seconds: 5
+    max_seconds: 10
 
   proxy:
     enabled: false
