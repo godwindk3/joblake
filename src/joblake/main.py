@@ -42,7 +42,11 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Validate sync and roll back row changes")
     parser.add_argument(
         "--strict", action="store_true",
-        help="Exit nonzero for blocked, failed or suspicious ingestion runs (for schedulers)",
+        help=(
+            "Exit nonzero for blocked or failed ingestion runs. "
+            "Suspicious runs remain successful so schedulers can continue "
+            "with downstream phases."
+        ),
     )
     parser.add_argument(
         "--log-level", type=str.upper,
@@ -79,7 +83,7 @@ def main() -> None:
         "Ingestion result: source_config=%s phase=%s status=%s",
         args.config, args.phase, status,
     )
-    if args.strict and status != "completed":
+    if args.strict and status in {"blocked", "failed"}:
         raise SystemExit(1)
 
 

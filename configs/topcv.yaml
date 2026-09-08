@@ -26,8 +26,8 @@ discovery:
 
   retry:
     max_attempts: 3
-    base_delay_seconds: 10
-    max_delay_seconds: 60
+    base_delay_seconds: 180
+    max_delay_seconds: 300
 
   pagination:
     page_param: page

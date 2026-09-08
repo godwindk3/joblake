@@ -485,7 +485,8 @@ class IngestionPipeline:
 
         except Exception as exc:
             self.state.fail_attempt(
-                # Record-level failures remain restartable, but visible to --strict.
+                # Record-level failures remain restartable and make the run
+                # suspicious without preventing downstream scheduler phases.
                 claim=claim,
                 attempt_status="storage_error",
                 completed_at=_utc_now(),
