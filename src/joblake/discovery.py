@@ -589,12 +589,13 @@ class DiscoveryCrawler:
 
         self.new_job_count += persisted_new_count
 
-        LOGGER.debug(
-            f"Target={request.target_name}, "
-            f"page={request.page_number}, "
-            f"found={len(page_urls)}, "
-            f"new={persisted_new_count}, "
-            f"run_unique={len(discovered_jobs)}"
+        LOGGER.info(
+            "Target=%s, page=%s, found=%s, new=%s, run_unique=%s",
+            request.target_name,
+            request.page_number,
+            len(page_urls),
+            persisted_new_count,
+            len(discovered_jobs),
         )
 
         time.sleep(

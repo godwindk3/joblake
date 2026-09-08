@@ -49,8 +49,11 @@ Browser evidence controls and storage growth review:
 
 JobLake uses standard Python logging to stderr with UTC timestamps, levels
 and module names. The default `INFO` level shows phase summaries, target
-progress and detail progress every 100 attempts. Per-job success and
-per-page discovery messages use `DEBUG`:
+progress, each completed discovery page (page, found, new, run_unique),
+and each detail attempt (number and URL) with its successful raw upload.
+Detail summaries are also emitted every 100 attempts. Parse logs each attempt
+and accepted/partial result at `INFO`, rejected records at `WARNING`, and
+processing or raw-integrity failures at `ERROR`. To enable additional debug output:
 
 ```powershell
 python -m joblake.main --config configs/itviec.yaml --phase detail --log-level DEBUG

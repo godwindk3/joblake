@@ -1,5 +1,12 @@
+x-log-rotation: &log-rotation
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   minio:
+    logging: *log-rotation
     image: quay.io/minio/minio
     container_name: joblake-minio
 
@@ -19,6 +26,7 @@ services:
     restart: unless-stopped
 
   postgres:
+    logging: *log-rotation
     image: postgres:16-alpine
     container_name: joblake-postgres
 

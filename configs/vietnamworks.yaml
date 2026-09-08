@@ -116,11 +116,11 @@ detail:
       - vietnamworks.com
       - www.vietnamworks.com
 
-  max_jobs_per_run: 20
+  max_jobs_per_run: null
 
   delay:
-    min_seconds: 15
-    max_seconds: 35
+    min_seconds: 6
+    max_seconds: 13
 
   proxy:
     enabled: false

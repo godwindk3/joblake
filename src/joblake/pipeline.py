@@ -316,14 +316,11 @@ class IngestionPipeline:
                     break
 
                 processed += 1
-                LOGGER.debug(
-                    f"Detail {processed}"
-                    + (
-                        f"/{max_jobs}"
-                        if max_jobs is not None
-                        else ""
-                    )
-                    + f": {claim.record.url}"
+                LOGGER.info(
+                    "Detail %s%s: %s",
+                    processed,
+                    f"/{max_jobs}" if max_jobs is not None else "",
+                    claim.record.url,
                 )
 
                 if not self._crawl_detail(
@@ -420,10 +417,10 @@ class IngestionPipeline:
                 completed_at=_utc_now(),
             )
 
-            LOGGER.debug(
-                "Raw detail ready: "
-                f"{stored.locator.bucket_name}/"
-                f"{stored.locator.object_key}"
+            LOGGER.info(
+                "Raw detail ready: %s/%s",
+                stored.locator.bucket_name,
+                stored.locator.object_key,
             )
 
         except SourceBlockedError as exc:

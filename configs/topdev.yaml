@@ -72,11 +72,11 @@ detail:
     required_path_prefixes:
       - /detail-jobs/
 
-  max_jobs_per_run: 20
+  max_jobs_per_run: null
 
   delay:
-    min_seconds: 10
-    max_seconds: 25
+    min_seconds: 5
+    max_seconds: 10
 
   proxy:
     enabled: false
