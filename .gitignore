@@ -222,8 +222,14 @@ __pycache__/
 *.py[cod]
 
 .env
+*.dump
+tmp/supabase-migration/
 data/raw/
 data/state/
+
+# Local Airflow runtime state and overrides
+orchestration/airflow/.env
+orchestration/airflow/logs/
 
 .pytest_cache/
 

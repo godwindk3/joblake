@@ -230,7 +230,7 @@ class PostgresSettingsTests(unittest.TestCase):
             if statement.startswith(
                 "UPDATE core.job_parse_results"
             )
-            and "is_current = FALSE" in statement
+            and "SET is_current = FALSE" in statement
         )
         promote_index = next(
             index
@@ -238,7 +238,7 @@ class PostgresSettingsTests(unittest.TestCase):
             if statement.startswith(
                 "UPDATE core.job_parse_results"
             )
-            and "is_current = TRUE" in statement
+            and "SET is_current = TRUE" in statement
         )
 
         self.assertEqual(result.parse_result_id, 3)

@@ -5,7 +5,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from joblake.models import FetchError, FetchResult
+from joblake.models import (
+    FetchError,
+    FetchResult,
+    HttpStatusError,
+)
 from joblake.pipeline import IngestionPipeline
 from joblake.sources import JobSource
 from joblake.state import SQLiteStateStore
@@ -96,6 +100,34 @@ class InvalidDetailFetcher(PipelineFetcher):
                 "Incomplete response without job title"
                 "</body></html>"
             ),
+        )
+
+
+class GoneDetailFetcher(PipelineFetcher):
+
+    def fetch(self, url, params=None, referer=None):
+        if self.phase != "detail":
+            return super().fetch(
+                url,
+                params=params,
+                referer=referer,
+            )
+
+        self.calls.append({
+            "phase": self.phase,
+            "url": url,
+            "params": params,
+            "referer": referer,
+        })
+        raise HttpStatusError(
+            FetchResult(
+                requested_url=url,
+                final_url=url,
+                status_code=410,
+                content_type="text/html",
+                fetched_at="2026-01-01T00:00:00+00:00",
+                html="gone",
+            )
         )
 
 
@@ -397,6 +429,87 @@ class IngestionPipelineTests(unittest.TestCase):
                 "retryable_error",
             )
             self.assertEqual(storage.details, [])
+
+    @patch("time.sleep")
+    def test_410_detail_becomes_permanent_without_retry(
+        self,
+        sleep,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = str(
+                Path(directory) / "joblake.db"
+            )
+            config = self._config(database_path)
+            calls = []
+
+            def fetcher_factory(fetcher_config):
+                phase = (
+                    "discovery"
+                    if "targets" in fetcher_config
+                    else "detail"
+                )
+                return GoneDetailFetcher(phase, calls)
+
+            pipeline = IngestionPipeline(
+                config=config,
+                source=PipelineSource(config),
+                storage=PipelineStorage(),
+                state=SQLiteStateStore(database_path),
+                fetcher_factory=fetcher_factory,
+            )
+
+            pipeline.run()
+            first_detail_call_count = len([
+                call
+                for call in calls
+                if call["phase"] == "detail"
+            ])
+            pipeline.run()
+            all_detail_calls = [
+                call
+                for call in calls
+                if call["phase"] == "detail"
+            ]
+            connection = sqlite3.connect(database_path)
+
+            try:
+                jobs = connection.execute(
+                    """
+                    SELECT
+                        raw_status,
+                        fetch_attempt_count,
+                        next_retry_at,
+                        last_http_status
+                    FROM jobs
+                    ORDER BY id
+                    """
+                ).fetchall()
+                attempts = connection.execute(
+                    """
+                    SELECT status, http_status, error_type
+                    FROM fetch_attempts
+                    ORDER BY id
+                    """
+                ).fetchall()
+            finally:
+                connection.close()
+
+            self.assertEqual(first_detail_call_count, 2)
+            self.assertEqual(len(all_detail_calls), 2)
+            self.assertEqual(
+                jobs,
+                [
+                    ("permanent_error", 1, None, 410),
+                    ("permanent_error", 1, None, 410),
+                ],
+            )
+            self.assertEqual(
+                attempts,
+                [
+                    ("fetch_error", 410, "HttpStatusError"),
+                    ("fetch_error", 410, "HttpStatusError"),
+                ],
+            )
 
     @patch("time.sleep")
     def test_discovery_and_detail_can_run_separately(

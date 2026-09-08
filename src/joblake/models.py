@@ -47,6 +47,21 @@ class FetchError(Exception):
     """Không thể fetch URL nhưng có thể thử lại ở lần chạy sau."""
 
 
+class HttpStatusError(FetchError):
+    """HTTP response không thành công, kèm metadata để lưu state."""
+
+    def __init__(self, fetch_result: FetchResult):
+        self.fetch_result = fetch_result
+        super().__init__(
+            f"HTTP status {fetch_result.status_code}: "
+            f"{fetch_result.final_url}"
+        )
+
+    @property
+    def status_code(self) -> int | None:
+        return self.fetch_result.status_code
+
+
 class SourceBlockedError(FetchError):
     """Nguồn trả về Cloudflare challenge hoặc chặn crawler."""
 

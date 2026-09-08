@@ -30,9 +30,11 @@ from joblake.block_detection import (
 from joblake.browser_actions import (
     run_browser_actions as _run_browser_actions,
 )
+from joblake.browser_diagnostics import BrowserDiagnostics
 from joblake.models import (
     FetchError,
     FetchResult,
+    HttpStatusError,
     SourceBlockedError,
 )
 
@@ -64,6 +66,26 @@ class RetrySettings:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _http_status_error(
+    *,
+    requested_url: str,
+    final_url: str,
+    status_code: int,
+    content_type: str | None,
+    html: str,
+) -> HttpStatusError:
+    return HttpStatusError(
+        FetchResult(
+            requested_url=requested_url,
+            final_url=final_url,
+            status_code=status_code,
+            content_type=content_type,
+            fetched_at=_utc_now(),
+            html=html,
+        )
+    )
 
 
 def _load_retry_settings(config: dict) -> RetrySettings:
@@ -396,6 +418,40 @@ def _settle_page(page, config: dict) -> None:
         )
 
 
+def _wait_for_cloudflare(page, response, config):
+    """Let a transient interstitial finish without refreshing the challenge."""
+    seconds = float(config.get("challenge_wait_seconds", 0))
+    if seconds <= 0:
+        return response
+    latest_response = response
+
+    def on_response(candidate):
+        nonlocal latest_response
+        if (candidate.request.is_navigation_request()
+                and candidate.frame == page.main_frame):
+            latest_response = candidate
+
+    page.on("response", on_response)
+    try:
+        LOGGER.warning("Cloudflare interstitial; waiting up to %.0fs", seconds)
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            page.wait_for_timeout(500)
+            try:
+                html = page.content()
+            except PlaywrightError:
+                # The interstitial may be navigating to the real document.
+                if page.is_closed():
+                    raise
+                continue
+            status = latest_response.status if latest_response else None
+            if not _detect_block_reason(status, html):
+                return latest_response
+        return latest_response
+    finally:
+        page.remove_listener("response", on_response)
+
+
 def _fetch_browser_page(
     *,
     page,
@@ -416,6 +472,9 @@ def _fetch_browser_page(
         1,
         retry_settings.max_attempts + 1,
     ):
+        stage = "navigation"
+        status_code = None
+        diagnostics = BrowserDiagnostics.from_config(page, config)
         try:
             goto_options = {
                 "wait_until": "domcontentloaded",
@@ -429,6 +488,14 @@ def _fetch_browser_page(
                 final_request_url,
                 **goto_options,
             )
+
+            stage = "response_check"
+
+            if _detect_block_reason(
+                response.status if response else None, page.content()
+            ) == "Cloudflare challenge":
+                stage = "challenge_wait"
+                response = _wait_for_cloudflare(page, response, config)
 
             html = page.content()
             status_code = (
@@ -465,6 +532,17 @@ def _fetch_browser_page(
                     f"{page.url}"
                 )
 
+            if status_code == 410:
+                raise _http_status_error(
+                    requested_url=final_request_url,
+                    final_url=page.url,
+                    status_code=status_code,
+                    content_type=response_headers.get(
+                        "content-type"
+                    ),
+                    html=html,
+                )
+
             block_reason = _detect_block_reason(
                 status_code,
                 html,
@@ -493,23 +571,36 @@ def _fetch_browser_page(
                     )
                     continue
 
-                raise FetchError(
-                    f"HTTP status {status_code}: "
-                    f"{page.url}"
+                raise _http_status_error(
+                    requested_url=final_request_url,
+                    final_url=page.url,
+                    status_code=status_code,
+                    content_type=response_headers.get(
+                        "content-type"
+                    ),
+                    html=html,
                 )
 
             if (
                 status_code is not None
                 and status_code >= 400
             ):
-                raise FetchError(
-                    f"HTTP status {status_code}: "
-                    f"{page.url}"
+                raise _http_status_error(
+                    requested_url=final_request_url,
+                    final_url=page.url,
+                    status_code=status_code,
+                    content_type=response_headers.get(
+                        "content-type"
+                    ),
+                    html=html,
                 )
 
+            stage = "ready_selector/settle"
             _settle_page(page, config)
+            stage = "browser_actions"
             _run_browser_actions(page, config)
 
+            stage = "content_capture"
             html = page.content()
             block_reason = _detect_block_reason(
                 status_code,
@@ -527,6 +618,12 @@ def _fetch_browser_page(
                 else None
             )
 
+            if config.get("diagnostics_capture_success", False):
+                diagnostics.capture(
+                    outcome="success", stage="completed", attempt=attempt,
+                    requested_url=final_request_url, final_url=page.url,
+                    status=status_code, ready_selector=config.get("ready_selector"),
+                )
             return FetchResult(
                 requested_url=final_request_url,
                 final_url=page.url,
@@ -537,6 +634,18 @@ def _fetch_browser_page(
             )
 
         except PlaywrightTimeoutError as exc:
+            LOGGER.warning(
+                "Browser timeout: stage=%s attempt=%s/%s url=%s status=%s "
+                "ready_selector=%r navigation_timeout=%ss ready_timeout=%ss error=%s",
+                stage, attempt, retry_settings.max_attempts, page.url, status_code,
+                config.get("ready_selector"), config["timeout_seconds"],
+                config.get("ready_timeout_seconds", config["timeout_seconds"]), exc,
+            )
+            diagnostics.capture(
+                stage=stage, attempt=attempt, requested_url=final_request_url,
+                final_url=page.url, status=status_code, error=str(exc),
+                ready_selector=config.get("ready_selector"),
+            )
             if _should_retry(
                 attempt,
                 retry_settings,
@@ -552,10 +661,12 @@ def _fetch_browser_page(
             raise FetchError(
                 f"Timeout after "
                 f"{retry_settings.max_attempts} "
-                f"attempt(s): {final_request_url}"
+                f"attempt(s): {final_request_url}; stage={stage}; {exc}"
             ) from exc
 
         except PlaywrightError as exc:
+            diagnostics.capture(outcome="error", stage=stage, attempt=attempt,
+                                requested_url=final_request_url, error=str(exc))
             if _should_retry(
                 attempt,
                 retry_settings,
@@ -590,6 +701,14 @@ def _fetch_browser_page(
                 f"attempt(s): {final_request_url}: "
                 f"{exc}"
             ) from exc
+
+        except (SourceBlockedError, HttpStatusError) as exc:
+            diagnostics.capture(outcome="error", stage=stage, attempt=attempt,
+                                requested_url=final_request_url, error=str(exc))
+            raise
+
+        finally:
+            diagnostics.close()
 
     raise FetchError(
         f"Unable to fetch: {final_request_url}"
@@ -712,6 +831,19 @@ class RequestsFetcher:
                     f"{response.url}"
                 )
 
+            if response.status_code == 410:
+                raise _http_status_error(
+                    requested_url=(
+                        response.request.url or url
+                    ),
+                    final_url=response.url,
+                    status_code=response.status_code,
+                    content_type=response.headers.get(
+                        "content-type"
+                    ),
+                    html=html,
+                )
+
             block_reason = _detect_block_reason(
                 response.status_code,
                 html,
@@ -746,10 +878,16 @@ class RequestsFetcher:
                     continue
 
             if response.status_code >= 400:
-                raise FetchError(
-                    f"HTTP status "
-                    f"{response.status_code}: "
-                    f"{response.url}"
+                raise _http_status_error(
+                    requested_url=(
+                        response.request.url or url
+                    ),
+                    final_url=response.url,
+                    status_code=response.status_code,
+                    content_type=response.headers.get(
+                        "content-type"
+                    ),
+                    html=html,
                 )
 
             return FetchResult(
@@ -1041,6 +1179,9 @@ class CloakBrowserFetcher:
 
 
 def create_fetcher(config: dict):
+    if config.get("browser_flow") == "vietnamworks_pagination":
+        from joblake.vietnamworks_browser import VietnamWorksDiscoveryFetcher
+        return VietnamWorksDiscoveryFetcher(config)
     transport = config["transport"]
 
     if transport == "requests":

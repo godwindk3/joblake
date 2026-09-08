@@ -3,6 +3,12 @@ source_adapter: joblake.sources.vietnamworks.VietnamWorksSource
 enabled: true
 
 discovery:
+  browser_flow: vietnamworks_pagination
+  diagnostics_dir: data/state/diagnostics/vietnamworks/discovery
+  diagnostics_enabled: true
+  diagnostics_capture_success: false
+  diagnostics_retention_days: 7
+  diagnostics_max_captures: 100
   transport: cloakbrowser
   headless: false
   timeout_seconds: 60
@@ -62,6 +68,11 @@ discovery:
         g: 5
 
 detail:
+  diagnostics_dir: data/state/diagnostics/vietnamworks/detail
+  diagnostics_enabled: true
+  diagnostics_capture_success: false
+  diagnostics_retention_days: 7
+  diagnostics_max_captures: 100
   transport: cloakbrowser
   headless: false
   timeout_seconds: 60

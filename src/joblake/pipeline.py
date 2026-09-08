@@ -1,3 +1,4 @@
+import logging
 import random
 import time
 from datetime import datetime, timedelta, timezone
@@ -5,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from joblake.discovery import DiscoveryCrawler
 from joblake.models import (
     FetchError,
+    HttpStatusError,
     PaginationDetectionError,
     SourceBlockedError,
     StorageIntegrityError,
@@ -19,6 +21,9 @@ from joblake.storage import (
     RawStorage,
     create_raw_storage,
 )
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _utc_now() -> str:
@@ -48,8 +53,9 @@ class IngestionPipeline:
         self.state = state or create_state_store(config)
         self.fetcher_factory = fetcher_factory
         self.parse_service_factory = parse_service_factory
+        self._detail_error_count = 0
 
-    def run(self, phase: str = "full") -> None:
+    def run(self, phase: str = "full") -> str:
         if phase not in {
             "full",
             "discovery",
@@ -65,6 +71,7 @@ class IngestionPipeline:
             self.source.name,
             _utc_now(),
         )
+        LOGGER.info("Run started: run_id=%s source=%s phase=%s", run_id, self.source.name, phase)
         crawler: DiscoveryCrawler | None = None
         discovered_url_count = 0
         new_url_count = 0
@@ -83,8 +90,7 @@ class IngestionPipeline:
                 raise
 
         if phase == "parse":
-            self._run_parse_phase(run_id)
-            return
+            return self._run_parse_phase(run_id)
 
         if phase in {"full", "discovery"}:
             crawler = self._create_discovery_crawler(
@@ -92,7 +98,7 @@ class IngestionPipeline:
             )
 
             try:
-                print(
+                LOGGER.info(
                     "========== PHASE 1: DISCOVERY =========="
                 )
                 crawler.run()
@@ -114,8 +120,8 @@ class IngestionPipeline:
                     ),
                     new_url_count=new_url_count,
                 )
-                print(f"Discovery stopped: {exc}")
-                return
+                LOGGER.warning(f"Discovery stopped: {exc}")
+                return "blocked"
             except (
                 FetchError,
                 PaginationDetectionError,
@@ -133,8 +139,8 @@ class IngestionPipeline:
                     ),
                     new_url_count=new_url_count,
                 )
-                print(f"Discovery failed: {exc}")
-                return
+                LOGGER.error(f"Discovery failed: {exc}")
+                return "failed"
             except Exception as exc:
                 discovered_url_count = len(
                     crawler.run_records
@@ -156,7 +162,7 @@ class IngestionPipeline:
                 if crawler.has_failed_targets
                 else "completed"
             )
-            print(
+            LOGGER.info(
                 f"Discovery {discovery_result}: "
                 f"{discovered_url_count} unique jobs, "
                 f"{new_url_count} new"
@@ -180,7 +186,7 @@ class IngestionPipeline:
                     ),
                     new_url_count=new_url_count,
                 )
-                return
+                return run_status
 
         try:
             detail_status = self._run_details(run_id)
@@ -215,9 +221,10 @@ class IngestionPipeline:
             discovered_url_count=discovered_url_count,
             new_url_count=new_url_count,
         )
+        return run_status
 
-    def _run_parse_phase(self, run_id: int) -> None:
-        print("========== PHASE 3: PARSE ==========")
+    def _run_parse_phase(self, run_id: int) -> str:
+        LOGGER.info("========== PHASE 3: PARSE ==========")
 
         try:
             if self.parse_service_factory is None:
@@ -256,6 +263,7 @@ class IngestionPipeline:
             discovered_url_count=0,
             new_url_count=0,
         )
+        return "suspicious" if summary.has_failures else "completed"
 
     def _create_discovery_crawler(
         self,
@@ -271,7 +279,8 @@ class IngestionPipeline:
         )
 
     def _run_details(self, run_id: int) -> str:
-        print("========== PHASE 2: DETAIL ==========")
+        self._detail_error_count = 0
+        LOGGER.info("========== PHASE 2: DETAIL ==========")
         detail_config = self.config["detail"]
         state_config = self.config["state"]
         max_jobs = detail_config.get("max_jobs_per_run")
@@ -307,7 +316,7 @@ class IngestionPipeline:
                     break
 
                 processed += 1
-                print(
+                LOGGER.debug(
                     f"Detail {processed}"
                     + (
                         f"/{max_jobs}"
@@ -326,8 +335,12 @@ class IngestionPipeline:
 
                 self._sleep(detail_config["delay"])
 
-        print(f"Detail attempts this run: {processed}")
-        return "completed"
+                if processed % 100 == 0:
+                    LOGGER.info("Detail progress: run_id=%s source=%s processed=%s errors=%s",
+                                run_id, self.source.name, processed, self._detail_error_count)
+
+        LOGGER.info(f"Detail attempts this run: {processed}; errors={self._detail_error_count}")
+        return "suspicious" if self._detail_error_count else "completed"
 
     def _crawl_detail(
         self,
@@ -355,6 +368,7 @@ class IngestionPipeline:
             )
 
             if not validation.is_valid:
+                self._detail_error_count += 1
                 self.state.fail_attempt(
                     claim=claim,
                     attempt_status="invalid_response",
@@ -368,7 +382,7 @@ class IngestionPipeline:
                     fetch_result=fetch_result,
                     validation=validation,
                 )
-                print(
+                LOGGER.warning(
                     "Detail raw validation failed: "
                     + ", ".join(validation.errors)
                 )
@@ -406,7 +420,7 @@ class IngestionPipeline:
                 completed_at=_utc_now(),
             )
 
-            print(
+            LOGGER.debug(
                 "Raw detail ready: "
                 f"{stored.locator.bucket_name}/"
                 f"{stored.locator.object_key}"
@@ -422,10 +436,42 @@ class IngestionPipeline:
                 max_attempts=max_attempts,
                 next_retry_at=self._next_retry_at(),
             )
-            print(f"Detail crawling blocked: {exc}")
+            LOGGER.warning(f"Detail crawling blocked: {exc}")
             return False
 
+        except HttpStatusError as exc:
+            retryable = exc.status_code != 410
+            if retryable:
+                self._detail_error_count += 1
+            self.state.fail_attempt(
+                claim=claim,
+                attempt_status="fetch_error",
+                completed_at=_utc_now(),
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+                max_attempts=max_attempts,
+                next_retry_at=(
+                    self._next_retry_at()
+                    if retryable
+                    else None
+                ),
+                retryable=retryable,
+                fetch_result=exc.fetch_result,
+            )
+
+            if retryable:
+                LOGGER.warning(
+                    "Detail failed, will retry according "
+                    f"to state policy: {exc}"
+                )
+            else:
+                LOGGER.warning(
+                    "Detail is permanently gone; removed "
+                    f"from retry queue: {exc}"
+                )
+
         except FetchError as exc:
+            self._detail_error_count += 1
             self.state.fail_attempt(
                 claim=claim,
                 attempt_status="fetch_error",
@@ -435,13 +481,14 @@ class IngestionPipeline:
                 max_attempts=max_attempts,
                 next_retry_at=self._next_retry_at(),
             )
-            print(
+            LOGGER.warning(
                 "Detail failed, will retry according "
                 f"to state policy: {exc}"
             )
 
         except Exception as exc:
             self.state.fail_attempt(
+                # Record-level failures remain restartable, but visible to --strict.
                 claim=claim,
                 attempt_status="storage_error",
                 completed_at=_utc_now(),
@@ -452,10 +499,11 @@ class IngestionPipeline:
                 fetch_result=fetch_result,
                 validation=validation,
             )
-            print(
+            LOGGER.exception(
                 "Detail processing failed, will retry "
                 f"according to state policy: {exc}"
             )
+            self._detail_error_count += 1
 
         return True
 
@@ -482,7 +530,7 @@ class IngestionPipeline:
                     stored,
                     now,
                 )
-                print(
+                LOGGER.info(
                     "Recovered completed upload: "
                     f"{pending.locator.object_key}"
                 )
@@ -561,7 +609,7 @@ class IngestionPipeline:
             )
 
         if checks:
-            print(
+            LOGGER.info(
                 "Raw integrity audit: "
                 f"checked={len(checks)}, "
                 f"failed={failed_count}"
@@ -613,9 +661,9 @@ class IngestionPipeline:
 def run_pipeline(
     config_path: str,
     phase: str = "full",
-) -> None:
+) -> str:
     from joblake.config import load_config
 
-    IngestionPipeline(
+    return IngestionPipeline(
         load_config(config_path)
     ).run(phase=phase)

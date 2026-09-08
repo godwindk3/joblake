@@ -18,7 +18,7 @@ from joblake.parsing.models import (
 
 class TopCVParser(JobParser):
     source = "topcv"
-    version = "1.0.1"
+    version = "1.0.2"
 
     def parse(
         self,

@@ -11,7 +11,9 @@ discovery:
   continue_on_target_error: true
 
   humanize: true
-  geoip: true
+  # Direct connection: use the explicit locale/timezone below.
+  geoip: false
+  challenge_wait_seconds: 30
   locale: vi-VN
   timezone_id: Asia/Ho_Chi_Minh
   storage_state_path: data/state/topcv_browser_state.json
@@ -70,7 +72,8 @@ detail:
   timeout_seconds: 60
 
   humanize: true
-  geoip: true
+  geoip: false
+  challenge_wait_seconds: 30
   locale: vi-VN
   timezone_id: Asia/Ho_Chi_Minh
   storage_state_path: data/state/topcv_browser_state.json

@@ -1,3 +1,4 @@
+import logging
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -9,6 +10,9 @@ from joblake.parsing.registry import create_parser
 from joblake.parsing.validation import assess_parsed_job
 from joblake.state import ParseClaim, StateStore
 from joblake.storage import RawStorage
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _utc_now() -> str:
@@ -126,7 +130,7 @@ class ParseService:
             failed=failed,
             exhausted=exhausted,
         )
-        print(
+        LOGGER.info(
             "Parse results: "
             f"processed={summary.processed}, "
             f"accepted={summary.accepted}, "
@@ -260,7 +264,7 @@ class ParseService:
             warnings=issue_dicts,
             output_location=stored.output_location,
         )
-        print(
+        LOGGER.debug(
             f"Parsed {assessment.status}: {claim.canonical_url}"
         )
         return assessment.status
@@ -279,7 +283,9 @@ class ParseService:
             error_type=type(error).__name__,
             error_message=str(error),
         )
-        print(f"Parse failed for {claim.canonical_url}: {error}")
+        LOGGER.error("Parse failed: run_id=%s job_id=%s url=%s error=%s",
+                     claim.run_id, claim.job_id, claim.canonical_url, error,
+                     exc_info=(type(error), error, error.__traceback__))
 
 
 def _is_missing_object_error(error: Exception) -> bool:
