@@ -26,8 +26,8 @@ discovery:
 
   retry:
     max_attempts: 3
-    base_delay_seconds: 180
-    max_delay_seconds: 300
+    base_delay_seconds: 90
+    max_delay_seconds: 180
 
   pagination:
     page_param: page
@@ -36,8 +36,8 @@ discovery:
     max_auto_pages: 200
 
   delay:
-    min_seconds: 5
-    max_seconds: 10
+    min_seconds: 10
+    max_seconds: 16
 
   proxy:
     enabled: false
@@ -86,8 +86,8 @@ detail:
 
   retry:
     max_attempts: 3
-    base_delay_seconds: 10
-    max_delay_seconds: 60
+    base_delay_seconds: 90
+    max_delay_seconds: 180
 
   validation:
     min_html_bytes: 5000
