@@ -16,6 +16,8 @@ dùng Xvfb và cấu hình browser hiện có.
 
 ## Chạy
 
+### Chạy riêng một nguồn
+
 1. Mở http://localhost:8080.
 2. Chọn DAG cần chạy, unpause rồi Trigger.
 3. Theo dõi từng task; khi lỗi, sửa nguyên nhân rồi Clear task lỗi và các
