@@ -141,7 +141,7 @@ storage:
   store_discovery: false
 
 state:
-  provider: sqlite
+  provider: postgres
   database_path: data/state/joblake.db
   detail_max_attempts: 3
   detail_retry_delay_seconds: 3600

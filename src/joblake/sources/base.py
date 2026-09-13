@@ -116,7 +116,7 @@ class JobSource(ABC):
         return None
 
     def normalize_job_url(self, url: str) -> str:
-        """Return the stable URL identity stored in SQLite."""
+        """Return the stable URL identity stored in crawler state."""
         return url
 
     def build_detail_request(

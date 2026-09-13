@@ -1,6 +1,7 @@
 import logging
 import random
 import time
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 
 from joblake.discovery import DiscoveryCrawler
@@ -56,6 +57,11 @@ class IngestionPipeline:
         self._detail_error_count = 0
 
     def run(self, phase: str = "full") -> str:
+        source_run = getattr(self.state, "source_run", None)
+        with source_run(self.source.name) if source_run else nullcontext():
+            return self._run_locked(phase)
+
+    def _run_locked(self, phase: str) -> str:
         if phase not in {
             "full",
             "discovery",

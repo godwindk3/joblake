@@ -39,7 +39,7 @@ hay đổi target trong DAG.
 
 - `configs/` và `src/` mount read-only từ host: YAML và code Python mới được
   đọc ở lần task khởi động tiếp theo, không cần restart Airflow.
-- `data/state/` mount read-write: dùng đúng SQLite và browser state hiện có,
+- `data/state/` mount read-write: giữ browser state và bản SQLite dự phòng,
   giữ được dữ liệu khi tạo lại container. Không chạy CLI host đồng thời trên
   cùng state, vì pool chỉ điều phối task Airflow.
 - Root `.env` mount read-only và CLI đọc lúc khởi động. Không copy secret
@@ -73,7 +73,7 @@ cũ. HTTP 410 được xử lý như URL đã mất vĩnh viễn, không làm fa
 
 Sau khi sửa nguyên nhân, dùng Clear task trong UI để chạy lại bước lỗi và
 các bước downstream đang `upstream_failed`. Parse đọc HTML đã có trong MinIO,
-không crawl lại website. Retry từng URL và thời điểm retry vẫn theo SQLite/YAML;
+không crawl lại website. Retry từng URL và thời điểm retry theo PostgreSQL/YAML;
 Clear task không bỏ qua `next_retry_at` hoặc giới hạn attempts. Một task thành
 công không có nghĩa toàn bộ backlog đã hết (có thể còn URL đang chờ retry).
 Record exhausted cần được xử lý theo state/parser policy, không chỉ Clear DAG.

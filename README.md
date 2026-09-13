@@ -4,13 +4,14 @@ Website-specific crawling is implemented through source adapters. See
 [Adding a job source](docs/adding-source.md) for the extension workflow.
 
 Raw detail HTML is stored in MinIO, crawl and parse state is stored in
-SQLite, and accepted normalized records are stored in PostgreSQL. See
-[MinIO raw storage and SQLite state](docs/storage-state.md) for the
+PostgreSQL (`crawl_state`), and accepted normalized records are stored in PostgreSQL. See
+[MinIO raw storage and crawler state](docs/storage-state.md) for the
 runtime flow and [PostgreSQL setup](docs/postgres-setup.md) for schema
 migration and querying parsed results.
 
-PostgreSQL is deliberately separate from the SQLite crawler queue. It
-is only written after a raw object passes parser validation.
+Crawler state and parsed output use separate PostgreSQL schemas. Parsed output
+is only written after a raw object passes parser validation. See
+[PostgreSQL state migration and operation](docs/postgres-state-migration.md).
 
 Available source configs:
 
@@ -59,7 +60,7 @@ processing or raw-integrity failures at `ERROR`. To enable additional debug outp
 python -m joblake.main --config configs/itviec.yaml --phase detail --log-level DEBUG
 ```
 
-Run-start messages include the SQLite run ID, source and phase. Unexpected
+Run-start messages include the state run ID, source and phase. Unexpected
 detail processing errors and caught parse exceptions include tracebacks.
 Standalone Supabase commands share the console configuration and retain
 their existing credential-safe error messages.
@@ -73,7 +74,7 @@ remain `INFO`; the JobLake level appears in the message. Task logs stay in
 The local Airflow environment includes four manual DAGs: `joblake_itviec`,
 `joblake_vietnamworks`, `joblake_topdev`, and `joblake_topcv`. Each runs
 `discovery -> detail -> parse`. Tasks call the existing CLI with `--strict`,
-read the mounted YAML at startup, and share the existing SQLite/MinIO/PostgreSQL
+read the mounted YAML at startup, and share the existing MinIO/PostgreSQL
 data. Supabase sync remains a separate manual CLI operation covering all sources.
 
 All four share the one-slot `joblake_serial` pool. New DAGs start paused;

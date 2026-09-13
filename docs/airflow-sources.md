@@ -30,8 +30,8 @@ nhiều website, chỉ một task JobLake chạy tại một thời điểm. Cá
 những website khác nhau có thể xen kẽ giữa các phase.
 
 CLI gọi với `--strict`; lỗi hoặc kết quả `suspicious` làm task đỏ. Không có
-Airflow retry tự động; retry từng URL do JobLake/SQLite quản lý. Không chạy
-CLI Windows đồng thời trên cùng SQLite. Pause DAG không dừng task đang chạy.
+Airflow retry tự động; retry từng URL do JobLake/PostgreSQL quản lý. Khóa theo
+source ngăn CLI và Airflow chạy cùng nguồn đồng thời. Pause DAG không dừng task đang chạy.
 
 Code và YAML mount trực tiếp, không cần build lại image khi thêm ba DAG này.
 Nếu scheduler đang dừng do một lượt crawl trước, kiểm tra và kết thúc run cũ

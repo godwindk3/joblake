@@ -59,6 +59,16 @@ def main():
             triggers = connection.execute("SELECT event_object_schema,event_object_table,trigger_name FROM information_schema.triggers WHERE event_object_schema IN ('core','ref')").fetchall()
             result = {"database": name, "tables": counts, "triggers": triggers}
             print(json.dumps(result), flush=True)
+    if config["state"].get("provider", "sqlite") == "postgres":
+        with psycopg.connect(**PostgresSettings.from_config(config).connection_kwargs()) as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            counts = {table: connection.execute(
+                psycopg.sql.SQL("SELECT count(*) FROM {}").format(
+                    psycopg.sql.Identifier("crawl_state", table))
+            ).fetchone()[0] for table in (
+                "crawl_runs", "discovery_targets", "jobs", "fetch_attempts", "raw_objects", "parse_attempts")}
+            print(json.dumps({"crawl_state": counts}), flush=True)
+        return
     path = ROOT / config["state"]["database_path"]
     if not path.exists():
         print(json.dumps({"sqlite": "absent; fresh ingestion will initialize it"}), flush=True)

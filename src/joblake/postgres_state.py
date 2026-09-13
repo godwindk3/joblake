@@ -1,539 +1,69 @@
+"""PostgreSQL crawl state. Schema changes are managed by Alembic."""
 import json
-import sqlite3
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
-from pathlib import Path
-from typing import Iterator, Protocol
+from dataclasses import replace
+from datetime import datetime
 
-from joblake.models import (
-    DiscoveryRecord,
-    FetchResult,
-    ValidationResult,
-)
-from joblake.storage import (
-    ObjectLocator,
-    RawObjectPayload,
-    StoredObject,
-)
+import psycopg
+
+from joblake.postgres import PostgresSettings
+from joblake.models import DiscoveryRecord, FetchResult, ValidationResult
+from joblake.storage import ObjectLocator, RawObjectPayload, StoredObject
+from joblake.state import JobClaim, PendingUpload, RawObjectCheck, ParseClaim, _require_parse_transition
 
 
-SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS crawl_runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (
-        status IN (
-            'running', 'completed', 'failed',
-            'blocked', 'suspicious'
-        )
-    ),
-    started_at TEXT NOT NULL,
-    finished_at TEXT,
-    discovered_url_count INTEGER NOT NULL DEFAULT 0,
-    new_url_count INTEGER NOT NULL DEFAULT 0,
-    error_type TEXT,
-    error_message TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS discovery_targets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id INTEGER NOT NULL,
-    source TEXT NOT NULL,
-    target_name TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (
-        status IN (
-            'running', 'completed', 'failed',
-            'blocked', 'suspicious'
-        )
-    ),
-    detected_last_page INTEGER,
-    fetched_page_count INTEGER NOT NULL DEFAULT 0,
-    discovered_url_count INTEGER NOT NULL DEFAULT 0,
-    new_url_count INTEGER NOT NULL DEFAULT 0,
-    duplicate_url_count INTEGER NOT NULL DEFAULT 0,
-    empty_page_count INTEGER NOT NULL DEFAULT 0,
-    invalid_page_count INTEGER NOT NULL DEFAULT 0,
-    started_at TEXT NOT NULL,
-    finished_at TEXT,
-    error_type TEXT,
-    error_message TEXT,
-    FOREIGN KEY(run_id) REFERENCES crawl_runs(id),
-    UNIQUE(run_id, target_name)
-);
-
-CREATE TABLE IF NOT EXISTS jobs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source TEXT NOT NULL,
-    url TEXT NOT NULL,
-    first_seen_at TEXT NOT NULL,
-    last_seen_at TEXT NOT NULL,
-    last_seen_run_id INTEGER,
-    last_target_name TEXT,
-    last_listing_url TEXT,
-    last_listing_page INTEGER,
-    raw_status TEXT NOT NULL DEFAULT 'pending' CHECK (
-        raw_status IN (
-            'pending', 'fetching', 'validating',
-            'uploading', 'raw_ready',
-            'retryable_error', 'blocked',
-            'permanent_error', 'storage_missing',
-            'storage_corrupt'
-        )
-    ),
-    fetch_attempt_count INTEGER NOT NULL DEFAULT 0,
-    last_attempt_at TEXT,
-    next_retry_at TEXT,
-    last_http_status INTEGER,
-    last_error_type TEXT,
-    last_error_message TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(last_seen_run_id) REFERENCES crawl_runs(id),
-    UNIQUE(source, url)
-);
-
-CREATE TABLE IF NOT EXISTS fetch_attempts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id INTEGER NOT NULL,
-    job_id INTEGER NOT NULL,
-    attempt_number INTEGER NOT NULL,
-    status TEXT NOT NULL CHECK (
-        status IN (
-            'fetching', 'invalid_response',
-            'fetch_error', 'blocked', 'uploading',
-            'storage_error', 'success'
-        )
-    ),
-    started_at TEXT NOT NULL,
-    completed_at TEXT,
-    requested_url TEXT NOT NULL,
-    final_url TEXT,
-    http_status INTEGER,
-    content_type TEXT,
-    content_length_bytes INTEGER,
-    content_sha256 TEXT,
-    validation_version TEXT,
-    validation_report TEXT,
-    storage_provider TEXT,
-    bucket_name TEXT,
-    object_key TEXT,
-    object_version TEXT,
-    fetched_at TEXT,
-    error_type TEXT,
-    error_message TEXT,
-    quarantine_bucket TEXT,
-    quarantine_object_key TEXT,
-    FOREIGN KEY(run_id) REFERENCES crawl_runs(id),
-    FOREIGN KEY(job_id) REFERENCES jobs(id),
-    UNIQUE(job_id, attempt_number)
-);
-
-CREATE TABLE IF NOT EXISTS raw_objects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_id INTEGER NOT NULL UNIQUE,
-    storage_provider TEXT NOT NULL,
-    bucket_name TEXT NOT NULL,
-    object_key TEXT NOT NULL,
-    object_version TEXT,
-    requested_url TEXT NOT NULL,
-    final_url TEXT,
-    http_status INTEGER NOT NULL,
-    content_type TEXT,
-    content_length_bytes INTEGER NOT NULL,
-    content_sha256 TEXT NOT NULL,
-    fetched_at TEXT NOT NULL,
-    stored_at TEXT NOT NULL,
-    validation_version TEXT NOT NULL,
-    validation_report TEXT NOT NULL,
-    last_integrity_check_at TEXT,
-    integrity_status TEXT NOT NULL DEFAULT 'valid' CHECK (
-        integrity_status IN (
-            'unchecked', 'valid', 'missing',
-            'size_mismatch', 'hash_mismatch'
-        )
-    ),
-    FOREIGN KEY(job_id) REFERENCES jobs(id),
-    UNIQUE(bucket_name, object_key)
-);
-
-CREATE TABLE IF NOT EXISTS parse_attempts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id INTEGER,
-    job_id INTEGER NOT NULL,
-    raw_object_id INTEGER NOT NULL,
-    parser_name TEXT NOT NULL,
-    parser_version TEXT NOT NULL,
-    attempt_number INTEGER NOT NULL DEFAULT 1,
-    status TEXT NOT NULL CHECK (
-        status IN (
-            'parsing', 'success', 'parse_error',
-            'validation_error', 'raw_missing',
-            'raw_corrupt'
-        )
-    ),
-    started_at TEXT NOT NULL,
-    completed_at TEXT,
-    parsed_field_count INTEGER,
-    missing_required_fields TEXT,
-    warnings TEXT,
-    output_location TEXT,
-    error_type TEXT,
-    error_message TEXT,
-    FOREIGN KEY(run_id) REFERENCES crawl_runs(id),
-    FOREIGN KEY(job_id) REFERENCES jobs(id),
-    FOREIGN KEY(raw_object_id) REFERENCES raw_objects(id),
-    UNIQUE(
-        raw_object_id,
-        parser_name,
-        parser_version,
-        attempt_number
-    )
-);
-
-CREATE INDEX IF NOT EXISTS idx_jobs_queue
-ON jobs(source, raw_status, next_retry_at);
-
-CREATE INDEX IF NOT EXISTS idx_jobs_last_seen
-ON jobs(source, last_seen_at);
-
-CREATE INDEX IF NOT EXISTS idx_fetch_attempts_job
-ON fetch_attempts(job_id, attempt_number DESC);
-
-CREATE INDEX IF NOT EXISTS idx_fetch_attempts_run
-ON fetch_attempts(run_id, status);
-
-CREATE INDEX IF NOT EXISTS idx_targets_run
-ON discovery_targets(run_id, status);
-
-CREATE INDEX IF NOT EXISTS idx_parse_pending
-ON parse_attempts(raw_object_id, parser_name, parser_version, status);
-
-"""
+def _state_row(cursor):
+    names = [column.name for column in cursor.description or ()]
+    def make_row(values):
+        return {name: value.isoformat() if isinstance(value, datetime) else value
+                for name, value in zip(names, values)}
+    return make_row
 
 
-@dataclass(frozen=True, slots=True)
-class JobClaim:
-    job_id: int
-    attempt_id: int
-    attempt_number: int
-    record: DiscoveryRecord
-
-
-@dataclass(frozen=True, slots=True)
-class PendingUpload:
-    job_id: int
-    attempt_id: int
-    locator: ObjectLocator
-    expected_size: int
-    expected_sha256: str
-
-
-@dataclass(frozen=True, slots=True)
-class RawObjectCheck:
-    raw_object_id: int
-    job_id: int
-    locator: ObjectLocator
-    expected_size: int
-    expected_sha256: str
-
-
-@dataclass(frozen=True, slots=True)
-class ParseClaim:
-    run_id: int
-    job_id: int
-    raw_object_id: int
-    attempt_id: int
-    attempt_number: int
-    source: str
-    canonical_url: str
-    first_seen_at: str
-    last_seen_at: str
-    fetched_at: str
-    locator: ObjectLocator
-    expected_size: int
-    expected_sha256: str
-
-
-class StateStore(Protocol):
-
-    def start_run(
-        self,
-        source: str,
-        started_at: str,
-    ) -> int: ...
-
-    def finish_run(
-        self,
-        run_id: int,
-        *,
-        status: str,
-        finished_at: str,
-        discovered_url_count: int,
-        new_url_count: int,
-        error_type: str | None = None,
-        error_message: str | None = None,
-    ) -> None: ...
-
-    def upsert_discovered_jobs(
-        self,
-        records: list[DiscoveryRecord],
-        run_id: int,
-    ) -> int: ...
-
-    def start_discovery_target(
-        self,
-        *,
-        run_id: int,
-        source: str,
-        target_name: str,
-        started_at: str,
-    ) -> int: ...
-
-    def finish_discovery_target(
-        self,
-        target_id: int,
-        *,
-        status: str,
-        finished_at: str,
-        detected_last_page: int | None,
-        fetched_page_count: int,
-        discovered_url_count: int,
-        new_url_count: int,
-        duplicate_url_count: int,
-        empty_page_count: int,
-        invalid_page_count: int = 0,
-        error_type: str | None = None,
-        error_message: str | None = None,
-    ) -> None: ...
-
-    def claim_next_job(
-        self,
-        *,
-        run_id: int,
-        source: str,
-        now: str,
-        max_attempts: int,
-    ) -> JobClaim | None: ...
-
-    def mark_validating(
-        self,
-        claim: JobClaim,
-    ) -> None: ...
-
-    def mark_uploading(
-        self,
-        *,
-        claim: JobClaim,
-        payload: RawObjectPayload,
-        fetch_result: FetchResult,
-        validation: ValidationResult,
-    ) -> None: ...
-
-    def complete_upload(
-        self,
-        *,
-        claim: JobClaim,
-        stored: StoredObject,
-        fetch_result: FetchResult,
-        validation: ValidationResult,
-        completed_at: str,
-    ) -> None: ...
-
-    def fail_attempt(
-        self,
-        *,
-        claim: JobClaim,
-        attempt_status: str,
-        completed_at: str,
-        error_type: str,
-        error_message: str,
-        max_attempts: int,
-        next_retry_at: str | None,
-        retryable: bool = True,
-        fetch_result: FetchResult | None = None,
-        validation: ValidationResult | None = None,
-    ) -> None: ...
-
-    def load_pending_uploads(
-        self,
-        source: str,
-    ) -> list[PendingUpload]: ...
-
-    def complete_recovered_upload(
-        self,
-        pending: PendingUpload,
-        stored: StoredObject,
-        completed_at: str,
-    ) -> None: ...
-
-    def fail_recovered_upload(
-        self,
-        pending: PendingUpload,
-        *,
-        completed_at: str,
-        next_retry_at: str,
-        error_message: str,
-    ) -> None: ...
-
-    def recover_stale_fetches(
-        self,
-        source: str,
-        recovered_at: str,
-    ) -> None: ...
-
-    def load_raw_objects_for_integrity(
-        self,
-        source: str,
-        limit: int,
-    ) -> list[RawObjectCheck]: ...
-
-    def update_raw_integrity(
-        self,
-        check: RawObjectCheck,
-        *,
-        status: str,
-        checked_at: str,
-    ) -> None: ...
-
-    def claim_next_raw_for_parse(
-        self,
-        *,
-        run_id: int,
-        source: str,
-        parser_name: str,
-        parser_version: str,
-        started_at: str,
-        max_attempts: int,
-    ) -> ParseClaim | None: ...
-
-    def complete_parse(
-        self,
-        claim: ParseClaim,
-        *,
-        completed_at: str,
-        parsed_field_count: int,
-        missing_required_fields: list[str],
-        warnings: list[dict],
-        output_location: str,
-    ) -> None: ...
-
-    def fail_parse(
-        self,
-        claim: ParseClaim,
-        *,
-        status: str,
-        completed_at: str,
-        error_type: str,
-        error_message: str,
-        missing_required_fields: list[str] | None = None,
-        warnings: list[dict] | None = None,
-        integrity_status: str | None = None,
-    ) -> None: ...
-
-    def recover_stale_parses(
-        self,
-        source: str,
-        recovered_at: str,
-        stale_before: str,
-    ) -> None: ...
-
-    def count_exhausted_parses(
-        self,
-        *,
-        source: str,
-        parser_name: str,
-        parser_version: str,
-        max_attempts: int,
-    ) -> int: ...
-
-
-class SQLiteStateStore:
-
-    def __init__(self, database_path: str):
-        self.database_path = Path(database_path)
-        self.database_path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-        self._initialize()
+class PostgresStateStore:
+    def __init__(self, settings):
+        self.settings = replace(settings, application_name="joblake-state")
+        self._run_connection = None
 
     @classmethod
-    def from_config(cls, config: dict):
-        return cls(
-            config["state"].get(
-                "database_path",
-                "data/state/joblake.db",
-            )
-        )
+    def from_config(cls, config):
+        return cls(PostgresSettings.from_config(config))
 
-    def _open_connection(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(
-            self.database_path,
-            timeout=5,
-        )
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA busy_timeout = 5000")
-        return connection
+    def _open_connection(self):
+        if self._run_connection is not None:
+            self._run_connection.execute("SELECT 1")
+        return psycopg.connect(**self.settings.connection_kwargs(), row_factory=_state_row,
+                               options="-c timezone=UTC -c lock_timeout=10000 -c statement_timeout=60000")
 
     @contextmanager
-    def _connect(
-        self,
-    ) -> Iterator[sqlite3.Connection]:
-        connection = self._open_connection()
-
-        try:
+    def _connect(self):
+        if self._run_connection is not None:
+            # If the lock session is lost, abort rather than write without ownership.
+            self._run_connection.execute("SELECT 1")
+        with self._open_connection() as connection:
             yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
 
-    def _initialize(self) -> None:
-        with self._connect() as connection:
-            connection.execute("PRAGMA journal_mode = WAL")
-            connection.executescript(SCHEMA_SQL)
-            self._migrate_parse_attempts(connection)
-
-    @staticmethod
-    def _migrate_parse_attempts(
-        connection: sqlite3.Connection,
-    ) -> None:
-        columns = {
-            row[1]
-            for row in connection.execute(
-                "PRAGMA table_info(parse_attempts)"
-            ).fetchall()
-        }
-        if "run_id" not in columns:
-            connection.execute(
-                """
-                ALTER TABLE parse_attempts
-                ADD COLUMN run_id INTEGER
-                REFERENCES crawl_runs(id)
-                """
-            )
-        connection.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_parse_run
-            ON parse_attempts(run_id, status)
-            """
-        )
-        connection.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_parse_claim
-            ON parse_attempts(
-                parser_name,
-                parser_version,
-                raw_object_id,
-                status,
-                run_id
-            )
-            """
-        )
+    @contextmanager
+    def source_run(self, source):
+        # A dedicated session owns the lock for recovery and the entire phase.
+        # Worker parallelism within a source requires leases and is intentionally disabled.
+        if self._run_connection is not None:
+            raise RuntimeError("This state store already owns a source run")
+        with self._open_connection() as connection:
+            connection.autocommit = True
+            acquired = connection.execute(
+                "SELECT pg_try_advisory_lock(hashtextextended(%s, 0)) AS acquired",
+                ("joblake-state:" + source,),
+            ).fetchone()["acquired"]
+            if not acquired:
+                raise RuntimeError(f"Another JobLake phase is running for source={source}")
+            self._run_connection = connection
+            try:
+                yield
+            finally:
+                self._run_connection = None
+                connection.execute("SELECT pg_advisory_unlock(hashtextextended(%s, 0))",
+                                   ("joblake-state:" + source,))
 
     def start_run(
         self,
@@ -543,16 +73,17 @@ class SQLiteStateStore:
         with self._connect() as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO crawl_runs (
+                INSERT INTO crawl_state.crawl_runs (
                     source,
                     status,
                     started_at
                 )
-                VALUES (?, 'running', ?)
+                VALUES (%s, 'running', %s)
+                RETURNING id
                 """,
                 (source, started_at),
             )
-            return int(cursor.lastrowid)
+            return int(cursor.fetchone()["id"])
 
     def finish_run(
         self,
@@ -568,15 +99,15 @@ class SQLiteStateStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                UPDATE crawl_runs
+                UPDATE crawl_state.crawl_runs
                 SET
-                    status = ?,
-                    finished_at = ?,
-                    discovered_url_count = ?,
-                    new_url_count = ?,
-                    error_type = ?,
-                    error_message = ?
-                WHERE id = ?
+                    status = %s,
+                    finished_at = %s,
+                    discovered_url_count = %s,
+                    new_url_count = %s,
+                    error_type = %s,
+                    error_message = %s
+                WHERE id = %s
                 """,
                 (
                     status,
@@ -600,14 +131,15 @@ class SQLiteStateStore:
         with self._connect() as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO discovery_targets (
+                INSERT INTO crawl_state.discovery_targets (
                     run_id,
                     source,
                     target_name,
                     status,
                     started_at
                 )
-                VALUES (?, ?, ?, 'running', ?)
+                VALUES (%s, %s, %s, 'running', %s)
+                RETURNING id
                 """,
                 (
                     run_id,
@@ -616,7 +148,7 @@ class SQLiteStateStore:
                     started_at,
                 ),
             )
-            return int(cursor.lastrowid)
+            return int(cursor.fetchone()["id"])
 
     def finish_discovery_target(
         self,
@@ -637,20 +169,20 @@ class SQLiteStateStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                UPDATE discovery_targets
+                UPDATE crawl_state.discovery_targets
                 SET
-                    status = ?,
-                    detected_last_page = ?,
-                    fetched_page_count = ?,
-                    discovered_url_count = ?,
-                    new_url_count = ?,
-                    duplicate_url_count = ?,
-                    empty_page_count = ?,
-                    invalid_page_count = ?,
-                    finished_at = ?,
-                    error_type = ?,
-                    error_message = ?
-                WHERE id = ?
+                    status = %s,
+                    detected_last_page = %s,
+                    fetched_page_count = %s,
+                    discovered_url_count = %s,
+                    new_url_count = %s,
+                    duplicate_url_count = %s,
+                    empty_page_count = %s,
+                    invalid_page_count = %s,
+                    finished_at = %s,
+                    error_type = %s,
+                    error_message = %s
+                WHERE id = %s
                 """,
                 (
                     status,
@@ -677,55 +209,33 @@ class SQLiteStateStore:
 
         with self._connect() as connection:
             for record in records:
-                existing = connection.execute(
+                inserted = connection.execute(
                     """
-                    SELECT id
-                    FROM jobs
-                    WHERE source = ? AND url = ?
+                    INSERT INTO crawl_state.jobs
+                        (source, url, first_seen_at, last_seen_at, last_seen_run_id,
+                         last_target_name, last_listing_url, last_listing_page)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (source, url) DO NOTHING
+                    RETURNING id
                     """,
-                    (record.source, record.url),
+                    (record.source, record.url, record.discovered_at, record.discovered_at,
+                     run_id, record.target_name, record.listing_url, record.listing_page),
                 ).fetchone()
 
-                if existing is None:
-                    connection.execute(
-                        """
-                        INSERT INTO jobs (
-                            source,
-                            url,
-                            first_seen_at,
-                            last_seen_at,
-                            last_seen_run_id,
-                            last_target_name,
-                            last_listing_url,
-                            last_listing_page,
-                            raw_status
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-                        """,
-                        (
-                            record.source,
-                            record.url,
-                            record.discovered_at,
-                            record.discovered_at,
-                            run_id,
-                            record.target_name,
-                            record.listing_url,
-                            record.listing_page,
-                        ),
-                    )
+                if inserted is not None:
                     new_count += 1
                 else:
                     connection.execute(
                         """
-                        UPDATE jobs
+                        UPDATE crawl_state.jobs
                         SET
-                            last_seen_at = ?,
-                            last_seen_run_id = ?,
-                            last_target_name = ?,
-                            last_listing_url = ?,
-                            last_listing_page = ?,
+                            last_seen_at = %s,
+                            last_seen_run_id = %s,
+                            last_target_name = %s,
+                            last_listing_url = %s,
+                            last_listing_page = %s,
                             updated_at = CURRENT_TIMESTAMP
-                        WHERE id = ?
+                        WHERE source = %s AND url = %s
                         """,
                         (
                             record.discovered_at,
@@ -733,7 +243,8 @@ class SQLiteStateStore:
                             record.target_name,
                             record.listing_url,
                             record.listing_page,
-                            existing["id"],
+                            record.source,
+                            record.url,
                         ),
                     )
 
@@ -750,24 +261,25 @@ class SQLiteStateStore:
         connection = self._open_connection()
 
         try:
-            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("BEGIN")
             row = connection.execute(
                 """
                 SELECT *
-                FROM jobs
-                WHERE source = ?
+                FROM crawl_state.jobs
+                WHERE source = %s
                   AND raw_status IN (
                       'pending',
                       'retryable_error',
                       'blocked'
                   )
-                  AND fetch_attempt_count < ?
+                  AND fetch_attempt_count < %s
                   AND (
                       next_retry_at IS NULL
-                      OR next_retry_at <= ?
+                      OR next_retry_at <= %s
                   )
                 ORDER BY first_seen_at, id
                 LIMIT 1
+                FOR UPDATE SKIP LOCKED
                 """,
                 (source, max_attempts, now),
             ).fetchone()
@@ -781,16 +293,16 @@ class SQLiteStateStore:
             )
             connection.execute(
                 """
-                UPDATE jobs
+                UPDATE crawl_state.jobs
                 SET
                     raw_status = 'fetching',
-                    fetch_attempt_count = ?,
-                    last_attempt_at = ?,
+                    fetch_attempt_count = %s,
+                    last_attempt_at = %s,
                     next_retry_at = NULL,
                     last_error_type = NULL,
                     last_error_message = NULL,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = %s
                 """,
                 (
                     attempt_number,
@@ -800,7 +312,7 @@ class SQLiteStateStore:
             )
             cursor = connection.execute(
                 """
-                INSERT INTO fetch_attempts (
+                INSERT INTO crawl_state.fetch_attempts (
                     run_id,
                     job_id,
                     attempt_number,
@@ -808,7 +320,8 @@ class SQLiteStateStore:
                     started_at,
                     requested_url
                 )
-                VALUES (?, ?, ?, 'fetching', ?, ?)
+                VALUES (%s, %s, %s, 'fetching', %s, %s)
+                RETURNING id
                 """,
                 (
                     run_id,
@@ -822,7 +335,7 @@ class SQLiteStateStore:
 
             return JobClaim(
                 job_id=int(row["id"]),
-                attempt_id=int(cursor.lastrowid),
+                attempt_id=int(cursor.fetchone()["id"]),
                 attempt_number=attempt_number,
                 record=DiscoveryRecord(
                     source=row["source"],
@@ -853,11 +366,11 @@ class SQLiteStateStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                UPDATE jobs
+                UPDATE crawl_state.jobs
                 SET
                     raw_status = 'validating',
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = %s
                 """,
                 (claim.job_id,),
             )
@@ -878,23 +391,23 @@ class SQLiteStateStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                UPDATE fetch_attempts
+                UPDATE crawl_state.fetch_attempts
                 SET
                     status = 'uploading',
-                    requested_url = ?,
-                    final_url = ?,
-                    http_status = ?,
-                    content_type = ?,
-                    content_length_bytes = ?,
-                    content_sha256 = ?,
-                    validation_version = ?,
-                    validation_report = ?,
-                    storage_provider = ?,
-                    bucket_name = ?,
-                    object_key = ?,
-                    object_version = ?,
-                    fetched_at = ?
-                WHERE id = ?
+                    requested_url = %s,
+                    final_url = %s,
+                    http_status = %s,
+                    content_type = %s,
+                    content_length_bytes = %s,
+                    content_sha256 = %s,
+                    validation_version = %s,
+                    validation_report = %s,
+                    storage_provider = %s,
+                    bucket_name = %s,
+                    object_key = %s,
+                    object_version = %s,
+                    fetched_at = %s
+                WHERE id = %s
                 """,
                 (
                     fetch_result.requested_url,
@@ -915,12 +428,12 @@ class SQLiteStateStore:
             )
             connection.execute(
                 """
-                UPDATE jobs
+                UPDATE crawl_state.jobs
                 SET
                     raw_status = 'uploading',
-                    last_http_status = ?,
+                    last_http_status = %s,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = %s
                 """,
                 (
                     fetch_result.status_code,
@@ -945,7 +458,7 @@ class SQLiteStateStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT INTO raw_objects (
+                INSERT INTO crawl_state.raw_objects (
                     job_id,
                     storage_provider,
                     bucket_name,
@@ -965,8 +478,8 @@ class SQLiteStateStore:
                     integrity_status
                 )
                 VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, 'valid'
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, 'valid'
                 )
                 """,
                 (
@@ -990,12 +503,12 @@ class SQLiteStateStore:
             )
             connection.execute(
                 """
-                UPDATE fetch_attempts
+                UPDATE crawl_state.fetch_attempts
                 SET
                     status = 'success',
-                    object_version = ?,
-                    completed_at = ?
-                WHERE id = ?
+                    object_version = %s,
+                    completed_at = %s
+                WHERE id = %s
                 """,
                 (
                     stored.locator.object_version,
@@ -1005,14 +518,14 @@ class SQLiteStateStore:
             )
             connection.execute(
                 """
-                UPDATE jobs
+                UPDATE crawl_state.jobs
                 SET
                     raw_status = 'raw_ready',
                     next_retry_at = NULL,
                     last_error_type = NULL,
                     last_error_message = NULL,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = %s
                 """,
                 (claim.job_id,),
             )
@@ -1054,24 +567,24 @@ class SQLiteStateStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                UPDATE fetch_attempts
+                UPDATE crawl_state.fetch_attempts
                 SET
-                    status = ?,
-                    completed_at = ?,
-                    final_url = COALESCE(?, final_url),
-                    http_status = COALESCE(?, http_status),
-                    content_type = COALESCE(?, content_type),
+                    status = %s,
+                    completed_at = %s,
+                    final_url = COALESCE(%s, final_url),
+                    http_status = COALESCE(%s, http_status),
+                    content_type = COALESCE(%s, content_type),
                     validation_version = COALESCE(
-                        ?,
+                        %s,
                         validation_version
                     ),
                     validation_report = COALESCE(
-                        ?,
+                        %s,
                         validation_report
                     ),
-                    error_type = ?,
-                    error_message = ?
-                WHERE id = ?
+                    error_type = %s,
+                    error_message = %s
+                WHERE id = %s
                 """,
                 (
                     attempt_status,
@@ -1104,18 +617,18 @@ class SQLiteStateStore:
             )
             connection.execute(
                 """
-                UPDATE jobs
+                UPDATE crawl_state.jobs
                 SET
-                    raw_status = ?,
-                    next_retry_at = ?,
+                    raw_status = %s,
+                    next_retry_at = %s,
                     last_http_status = COALESCE(
-                        ?,
+                        %s,
                         last_http_status
                     ),
-                    last_error_type = ?,
-                    last_error_message = ?,
+                    last_error_type = %s,
+                    last_error_message = %s,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = %s
                 """,
                 (
                     job_status,
@@ -1147,9 +660,9 @@ class SQLiteStateStore:
                     a.object_version,
                     a.content_length_bytes,
                     a.content_sha256
-                FROM fetch_attempts AS a
-                JOIN jobs AS j ON j.id = a.job_id
-                WHERE j.source = ?
+                FROM crawl_state.fetch_attempts AS a
+                JOIN crawl_state.jobs AS j ON j.id = a.job_id
+                WHERE j.source = %s
                   AND a.status = 'uploading'
                   AND a.bucket_name IS NOT NULL
                   AND a.object_key IS NOT NULL
@@ -1185,8 +698,8 @@ class SQLiteStateStore:
             row = connection.execute(
                 """
                 SELECT *
-                FROM fetch_attempts
-                WHERE id = ?
+                FROM crawl_state.fetch_attempts
+                WHERE id = %s
                 """,
                 (pending.attempt_id,),
             ).fetchone()
@@ -1196,7 +709,7 @@ class SQLiteStateStore:
 
             connection.execute(
                 """
-                INSERT OR IGNORE INTO raw_objects (
+                INSERT INTO crawl_state.raw_objects (
                     job_id,
                     storage_provider,
                     bucket_name,
@@ -1216,9 +729,10 @@ class SQLiteStateStore:
                     integrity_status
                 )
                 VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, 'valid'
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, 'valid'
                 )
+                ON CONFLICT (job_id) DO NOTHING
                 """,
                 (
                     pending.job_id,
@@ -1241,12 +755,12 @@ class SQLiteStateStore:
             )
             connection.execute(
                 """
-                UPDATE fetch_attempts
+                UPDATE crawl_state.fetch_attempts
                 SET
                     status = 'success',
-                    object_version = ?,
-                    completed_at = ?
-                WHERE id = ?
+                    object_version = %s,
+                    completed_at = %s
+                WHERE id = %s
                 """,
                 (
                     stored.locator.object_version,
@@ -1256,14 +770,14 @@ class SQLiteStateStore:
             )
             connection.execute(
                 """
-                UPDATE jobs
+                UPDATE crawl_state.jobs
                 SET
                     raw_status = 'raw_ready',
                     next_retry_at = NULL,
                     last_error_type = NULL,
                     last_error_message = NULL,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = %s
                 """,
                 (pending.job_id,),
             )
@@ -1279,13 +793,13 @@ class SQLiteStateStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                UPDATE fetch_attempts
+                UPDATE crawl_state.fetch_attempts
                 SET
                     status = 'storage_error',
-                    completed_at = ?,
+                    completed_at = %s,
                     error_type = 'UploadRecoveryError',
-                    error_message = ?
-                WHERE id = ?
+                    error_message = %s
+                WHERE id = %s
                 """,
                 (
                     completed_at,
@@ -1295,14 +809,14 @@ class SQLiteStateStore:
             )
             connection.execute(
                 """
-                UPDATE jobs
+                UPDATE crawl_state.jobs
                 SET
                     raw_status = 'retryable_error',
-                    next_retry_at = ?,
+                    next_retry_at = %s,
                     last_error_type = 'UploadRecoveryError',
-                    last_error_message = ?,
+                    last_error_message = %s,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = %s
                 """,
                 (
                     next_retry_at,
@@ -1319,29 +833,29 @@ class SQLiteStateStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                UPDATE fetch_attempts
+                UPDATE crawl_state.fetch_attempts
                 SET
                     status = 'fetch_error',
-                    completed_at = ?,
+                    completed_at = %s,
                     error_type = 'InterruptedRun',
                     error_message = 'Recovered unfinished fetch from a previous process'
                 WHERE status = 'fetching'
                   AND job_id IN (
-                      SELECT id FROM jobs WHERE source = ?
+                      SELECT id FROM crawl_state.jobs WHERE source = %s
                   )
                 """,
                 (recovered_at, source),
             )
             connection.execute(
                 """
-                UPDATE jobs
+                UPDATE crawl_state.jobs
                 SET
                     raw_status = 'retryable_error',
                     next_retry_at = NULL,
                     last_error_type = 'InterruptedRun',
                     last_error_message = 'Recovered unfinished fetch from a previous process',
                     updated_at = CURRENT_TIMESTAMP
-                WHERE source = ?
+                WHERE source = %s
                   AND raw_status IN (
                       'fetching',
                       'validating'
@@ -1367,14 +881,14 @@ class SQLiteStateStore:
                     r.object_version,
                     r.content_length_bytes,
                     r.content_sha256
-                FROM raw_objects AS r
-                JOIN jobs AS j ON j.id = r.job_id
-                WHERE j.source = ?
+                FROM crawl_state.raw_objects AS r
+                JOIN crawl_state.jobs AS j ON j.id = r.job_id
+                WHERE j.source = %s
                 ORDER BY
                     r.last_integrity_check_at IS NOT NULL,
                     r.last_integrity_check_at,
                     r.id
-                LIMIT ?
+                LIMIT %s
                 """,
                 (source, limit),
             ).fetchall()
@@ -1416,11 +930,11 @@ class SQLiteStateStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                UPDATE raw_objects
+                UPDATE crawl_state.raw_objects
                 SET
-                    integrity_status = ?,
-                    last_integrity_check_at = ?
-                WHERE id = ?
+                    integrity_status = %s,
+                    last_integrity_check_at = %s
+                WHERE id = %s
                 """,
                 (
                     status,
@@ -1430,13 +944,13 @@ class SQLiteStateStore:
             )
             connection.execute(
                 """
-                UPDATE jobs
+                UPDATE crawl_state.jobs
                 SET
-                    raw_status = ?,
-                    last_error_type = ?,
-                    last_error_message = ?,
+                    raw_status = %s,
+                    last_error_type = %s,
+                    last_error_message = %s,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = %s
                 """,
                 (
                     job_status,
@@ -1473,7 +987,7 @@ class SQLiteStateStore:
         connection = self._open_connection()
 
         try:
-            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("BEGIN")
             row = connection.execute(
                 """
                 SELECT
@@ -1491,8 +1005,8 @@ class SQLiteStateStore:
                     r.content_sha256,
                     r.fetched_at,
                     COALESCE(p.attempt_count, 0) AS attempt_count
-                FROM jobs AS j
-                JOIN raw_objects AS r ON r.job_id = j.id
+                FROM crawl_state.jobs AS j
+                JOIN crawl_state.raw_objects AS r ON r.job_id = j.id
                 LEFT JOIN (
                     SELECT
                         raw_object_id,
@@ -1510,23 +1024,24 @@ class SQLiteStateStore:
                             THEN 1 ELSE 0
                         END) AS is_active,
                         MAX(CASE
-                            WHEN run_id = ?
+                            WHEN run_id = %s
                             THEN 1 ELSE 0
                         END) AS attempted_this_run
-                    FROM parse_attempts
-                    WHERE parser_name = ?
-                      AND parser_version = ?
+                    FROM crawl_state.parse_attempts
+                    WHERE parser_name = %s
+                      AND parser_version = %s
                     GROUP BY raw_object_id
                 ) AS p ON p.raw_object_id = r.id
-                WHERE j.source = ?
+                WHERE j.source = %s
                   AND j.raw_status = 'raw_ready'
                   AND r.integrity_status = 'valid'
                   AND COALESCE(p.is_terminal, 0) = 0
                   AND COALESCE(p.is_active, 0) = 0
                   AND COALESCE(p.attempted_this_run, 0) = 0
-                  AND COALESCE(p.attempt_count, 0) < ?
+                  AND COALESCE(p.attempt_count, 0) < %s
                 ORDER BY j.first_seen_at, j.id
                 LIMIT 1
+                FOR UPDATE OF j SKIP LOCKED
                 """,
                 (
                     run_id,
@@ -1544,7 +1059,7 @@ class SQLiteStateStore:
             attempt_number = int(row["attempt_count"]) + 1
             cursor = connection.execute(
                 """
-                INSERT INTO parse_attempts (
+                INSERT INTO crawl_state.parse_attempts (
                     run_id,
                     job_id,
                     raw_object_id,
@@ -1554,7 +1069,8 @@ class SQLiteStateStore:
                     status,
                     started_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, 'parsing', ?)
+                VALUES (%s, %s, %s, %s, %s, %s, 'parsing', %s)
+                RETURNING id
                 """,
                 (
                     run_id,
@@ -1572,7 +1088,7 @@ class SQLiteStateStore:
                 run_id=run_id,
                 job_id=int(row["job_id"]),
                 raw_object_id=int(row["raw_object_id"]),
-                attempt_id=int(cursor.lastrowid),
+                attempt_id=int(cursor.fetchone()["id"]),
                 attempt_number=attempt_number,
                 source=row["source"],
                 canonical_url=row["url"],
@@ -1607,18 +1123,18 @@ class SQLiteStateStore:
         with self._connect() as connection:
             cursor = connection.execute(
                 """
-                UPDATE parse_attempts
+                UPDATE crawl_state.parse_attempts
                 SET
                     status = 'success',
-                    completed_at = ?,
-                    parsed_field_count = ?,
-                    missing_required_fields = ?,
-                    warnings = ?,
-                    output_location = ?,
+                    completed_at = %s,
+                    parsed_field_count = %s,
+                    missing_required_fields = %s,
+                    warnings = %s,
+                    output_location = %s,
                     error_type = NULL,
                     error_message = NULL
-                WHERE id = ?
-                  AND run_id = ?
+                WHERE id = %s
+                  AND run_id = %s
                   AND status = 'parsing'
                 """,
                 (
@@ -1668,16 +1184,16 @@ class SQLiteStateStore:
         with self._connect() as connection:
             cursor = connection.execute(
                 """
-                UPDATE parse_attempts
+                UPDATE crawl_state.parse_attempts
                 SET
-                    status = ?,
-                    completed_at = ?,
-                    missing_required_fields = ?,
-                    warnings = ?,
-                    error_type = ?,
-                    error_message = ?
-                WHERE id = ?
-                  AND run_id = ?
+                    status = %s,
+                    completed_at = %s,
+                    missing_required_fields = %s,
+                    warnings = %s,
+                    error_type = %s,
+                    error_message = %s
+                WHERE id = %s
+                  AND run_id = %s
                   AND status = 'parsing'
                 """,
                 (
@@ -1707,11 +1223,11 @@ class SQLiteStateStore:
                 )
                 connection.execute(
                     """
-                    UPDATE raw_objects
+                    UPDATE crawl_state.raw_objects
                     SET
-                        integrity_status = ?,
-                        last_integrity_check_at = ?
-                    WHERE id = ?
+                        integrity_status = %s,
+                        last_integrity_check_at = %s
+                    WHERE id = %s
                     """,
                     (
                         integrity_status,
@@ -1721,13 +1237,13 @@ class SQLiteStateStore:
                 )
                 connection.execute(
                     """
-                    UPDATE jobs
+                    UPDATE crawl_state.jobs
                     SET
-                        raw_status = ?,
-                        last_error_type = ?,
-                        last_error_message = ?,
+                        raw_status = %s,
+                        last_error_type = %s,
+                        last_error_message = %s,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
+                    WHERE id = %s
                     """,
                     (
                         job_status,
@@ -1746,16 +1262,16 @@ class SQLiteStateStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                UPDATE parse_attempts
+                UPDATE crawl_state.parse_attempts
                 SET
                     status = 'parse_error',
-                    completed_at = ?,
+                    completed_at = %s,
                     error_type = 'InterruptedRun',
                     error_message = 'Recovered unfinished parse from a previous process'
                 WHERE status = 'parsing'
-                  AND started_at <= ?
+                  AND started_at <= %s
                   AND job_id IN (
-                      SELECT id FROM jobs WHERE source = ?
+                      SELECT id FROM crawl_state.jobs WHERE source = %s
                   )
                 """,
                 (recovered_at, stale_before, source),
@@ -1778,13 +1294,13 @@ class SQLiteStateStore:
                 SELECT COUNT(*) AS exhausted_count
                 FROM (
                     SELECT r.id
-                    FROM jobs AS j
-                    JOIN raw_objects AS r ON r.job_id = j.id
-                    LEFT JOIN parse_attempts AS p
+                    FROM crawl_state.jobs AS j
+                    JOIN crawl_state.raw_objects AS r ON r.job_id = j.id
+                    LEFT JOIN crawl_state.parse_attempts AS p
                       ON p.raw_object_id = r.id
-                     AND p.parser_name = ?
-                     AND p.parser_version = ?
-                    WHERE j.source = ?
+                     AND p.parser_name = %s
+                     AND p.parser_version = %s
+                    WHERE j.source = %s
                       AND j.raw_status = 'raw_ready'
                       AND r.integrity_status = 'valid'
                     GROUP BY r.id
@@ -1799,7 +1315,7 @@ class SQLiteStateStore:
                     AND MAX(CASE
                         WHEN p.status = 'parsing' THEN 1 ELSE 0
                     END) = 0
-                    AND COUNT(p.id) >= ?
+                    AND COUNT(p.id) >= %s
                 ) AS exhausted
                 """,
                 (
@@ -1816,116 +1332,9 @@ class SQLiteStateStore:
             rows = connection.execute(
                 """
                 SELECT url
-                FROM jobs
+                FROM crawl_state.jobs
                 WHERE raw_status = 'raw_ready'
                 """
             ).fetchall()
 
         return {row["url"] for row in rows}
-
-
-def _require_parse_transition(
-    cursor: sqlite3.Cursor,
-    claim: ParseClaim,
-) -> None:
-    if cursor.rowcount != 1:
-        raise RuntimeError(
-            "Parse attempt is no longer owned by this run: "
-            f"attempt_id={claim.attempt_id}, run_id={claim.run_id}"
-        )
-
-
-class FileStateStore:
-    """Legacy file state kept only for compatibility utilities."""
-
-    def __init__(
-        self,
-        discovered_jobs_file: str,
-        crawled_urls_file: str,
-    ):
-        self.discovered_jobs_file = Path(
-            discovered_jobs_file
-        )
-        self.crawled_urls_file = Path(
-            crawled_urls_file
-        )
-
-    def save_discovered_jobs(
-        self,
-        records: dict[str, DiscoveryRecord],
-    ) -> None:
-        self.discovered_jobs_file.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        with self.discovered_jobs_file.open(
-            mode="w",
-            encoding="utf-8",
-        ) as file:
-            for record in records.values():
-                file.write(
-                    json.dumps(
-                        asdict(record),
-                        ensure_ascii=False,
-                    )
-                    + "\n"
-                )
-
-    def load_crawled_urls(self) -> set[str]:
-        if not self.crawled_urls_file.exists():
-            return set()
-
-        return {
-            line.strip()
-            for line in self.crawled_urls_file.read_text(
-                encoding="utf-8"
-            ).splitlines()
-            if line.strip()
-        }
-
-    def mark_crawled(self, url: str) -> None:
-        self.crawled_urls_file.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        with self.crawled_urls_file.open(
-            mode="a",
-            encoding="utf-8",
-        ) as file:
-            file.write(f"{url}\n")
-
-
-def create_state_store(config: dict) -> StateStore:
-    provider = config["state"].get(
-        "provider",
-        "sqlite",
-    )
-
-    if provider == "sqlite":
-        return SQLiteStateStore.from_config(config)
-    if provider == "postgres":
-        from joblake.postgres_state import PostgresStateStore
-        return PostgresStateStore.from_config(config)
-    raise ValueError(f"Unsupported state.provider: {provider}")
-
-
-def save_discovered_jobs(
-    path: str,
-    records: dict[str, DiscoveryRecord],
-) -> None:
-    FileStateStore(path, path).save_discovered_jobs(
-        records
-    )
-
-
-def load_crawled_urls(path: str) -> set[str]:
-    return FileStateStore(path, path).load_crawled_urls()
-
-
-def append_crawled_url(
-    path: str,
-    url: str,
-) -> None:
-    FileStateStore(path, path).mark_crawled(url)
