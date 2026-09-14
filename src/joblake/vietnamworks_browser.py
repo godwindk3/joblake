@@ -167,7 +167,8 @@ class VietnamWorksDiscoveryFetcher(CloakBrowserFetcher):
                     # The empty page contains unrelated recommendations. Do not ingest them.
                     return FetchResult(requested_url=requested, final_url=self.page.url,
                                        status_code=None, content_type="text/html", fetched_at=_utc_now(),
-                                       html="<html><body><!-- confirmed empty results --></body></html>")
+                                       html="<html><body><!-- confirmed empty results --></body></html>",
+                                       listing_end_confirmed=True)
                 stage = "scroll_remaining_jobs"
                 _run_browser_actions(self.page, self.config)
                 _settle_page(self.page, self.config)

@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import datetime
 
 import psycopg
+from joblake.cdc import PostgresCdcMixin
 
 from joblake.postgres import PostgresSettings
 from joblake.models import DiscoveryRecord, FetchResult, ValidationResult
@@ -20,10 +21,11 @@ def _state_row(cursor):
     return make_row
 
 
-class PostgresStateStore:
+class PostgresStateStore(PostgresCdcMixin):
     def __init__(self, settings):
         self.settings = replace(settings, application_name="joblake-state")
         self._run_connection = None
+        self._run_source = None
 
     @classmethod
     def from_config(cls, config):
@@ -58,10 +60,12 @@ class PostgresStateStore:
             if not acquired:
                 raise RuntimeError(f"Another JobLake phase is running for source={source}")
             self._run_connection = connection
+            self._run_source = source
             try:
                 yield
             finally:
                 self._run_connection = None
+                self._run_source = None
                 connection.execute("SELECT pg_advisory_unlock(hashtextextended(%s, 0))",
                                    ("joblake-state:" + source,))
 
@@ -106,7 +110,10 @@ class PostgresStateStore:
                     discovered_url_count = %s,
                     new_url_count = %s,
                     error_type = %s,
-                    error_message = %s
+                    error_message = %s,
+                    cdc_reason = CASE WHEN cdc_status='pending' THEN 'discovery_not_finalized' ELSE cdc_reason END,
+                    cdc_finished_at = CASE WHEN cdc_status='pending' THEN CURRENT_TIMESTAMP ELSE cdc_finished_at END,
+                    cdc_status = CASE WHEN cdc_status='pending' THEN 'skipped' ELSE cdc_status END
                 WHERE id = %s
                 """,
                 (

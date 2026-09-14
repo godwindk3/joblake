@@ -73,10 +73,21 @@ class IngestionPipeline:
                 "full, discovery, detail, parse"
             )
 
+        if (self.config.get('cdc', {}).get('enabled', False)
+                and self.config.get('state', {}).get('provider') != 'postgres'):
+            raise ValueError('CDC requires state.provider=postgres')
+
         run_id = self.state.start_run(
             self.source.name,
             _utc_now(),
         )
+        if self.config.get('state', {}).get('provider') == 'postgres':
+            try:
+                self.state.prepare_cdc_run(run_id, phase, self.config)
+            except Exception as exc:
+                self._finish_failed_run(run_id, status='failed', error=exc,
+                                        discovered_url_count=0, new_url_count=0)
+                raise
         LOGGER.info("Run started: run_id=%s source=%s phase=%s", run_id, self.source.name, phase)
         crawler: DiscoveryCrawler | None = None
         discovered_url_count = 0
@@ -108,6 +119,11 @@ class IngestionPipeline:
                     "========== PHASE 1: DISCOVERY =========="
                 )
                 crawler.run()
+                if self.config.get('cdc', {}).get('enabled', False):
+                    summary = self.state.finalize_cdc(run_id, _utc_now())
+                    LOGGER.info('CDC: run_id=%s status=%s expired=%s reappeared=%s reason=%s',
+                                run_id, summary['status'], summary['expired'],
+                                summary['reappeared'], summary['reason'])
                 discovered_url_count = len(
                     crawler.run_records
                 )

@@ -2,6 +2,10 @@ source: itviec
 source_adapter: joblake.sources.itviec.ITviecSource
 enabled: true
 
+cdc:
+  enabled: true
+  scope_version: 1
+
 discovery:
   transport: cloakbrowser
   headless: false

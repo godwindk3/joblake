@@ -2,6 +2,10 @@ source: vietnamworks
 source_adapter: joblake.sources.vietnamworks.VietnamWorksSource
 enabled: true
 
+cdc:
+  enabled: true
+  scope_version: 1
+
 discovery:
   browser_flow: vietnamworks_pagination
   diagnostics_dir: data/state/diagnostics/vietnamworks/discovery

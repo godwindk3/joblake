@@ -9,6 +9,7 @@ class FetchResult:
     content_type: str | None
     fetched_at: str
     html: str
+    listing_end_confirmed: bool = False
 
 
 @dataclass(frozen=True, slots=True)

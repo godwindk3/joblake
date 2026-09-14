@@ -94,6 +94,7 @@ class VietnamWorksBrowserTests(unittest.TestCase):
         fetcher._wait_result.return_value = "empty"
         result = fetcher.fetch(fetcher.page.url, {"page": 10})
         self.assertIn("confirmed empty results", result.html)
+        self.assertTrue(result.listing_end_confirmed)
         self.assertNotIn("job-1-jv", result.html)
         fetcher.page.goto.assert_called_once()
         button.click.assert_not_called()

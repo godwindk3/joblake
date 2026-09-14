@@ -57,6 +57,8 @@ class PostgresStateTests(unittest.TestCase):
         try:
             with engine.begin() as connection, Operations.context(MigrationContext.configure(connection)):
                 core_migration.upgrade()
+                cdc_migration = module_at("cdc_migration", ROOT / "migrations/versions/0003_url_cdc.py")
+                cdc_migration.upgrade()
         finally:
             engine.dispose()
 
@@ -69,7 +71,7 @@ class PostgresStateTests(unittest.TestCase):
         self.state = PostgresStateStore(self.settings)
         with self.state._connect() as c:
             c.execute("TRUNCATE core.job_parse_results, core.source_job_postings, ref.sources RESTART IDENTITY")
-            c.execute("TRUNCATE crawl_state.crawl_runs, crawl_state.discovery_targets, crawl_state.jobs, crawl_state.fetch_attempts, crawl_state.raw_objects, crawl_state.parse_attempts RESTART IDENTITY")
+            c.execute("TRUNCATE crawl_state.url_events, crawl_state.cdc_sources, crawl_state.crawl_runs, crawl_state.discovery_targets, crawl_state.jobs, crawl_state.fetch_attempts, crawl_state.raw_objects, crawl_state.parse_attempts RESTART IDENTITY")
 
     def record(self):
         return DiscoveryRecord("example", "https://example.com/job/one", "all", "https://example.com/jobs", 1, NOW)

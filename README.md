@@ -13,6 +13,10 @@ Crawler state and parsed output use separate PostgreSQL schemas. Parsed output
 is only written after a raw object passes parser validation. See
 [PostgreSQL state migration and operation](docs/postgres-state-migration.md).
 
+Listing URL CDC marks missing URLs expired after a complete discovery scan and
+records reappearances. The first qualifying scan creates a baseline. See
+[CDC coverage rules and reports](docs/url-cdc.md).
+
 Available source configs:
 
 - `configs/topcv.yaml`

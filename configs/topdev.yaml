@@ -2,6 +2,10 @@ source: topdev
 source_adapter: joblake.sources.topdev.TopDevSource
 enabled: true
 
+cdc:
+  enabled: true
+  scope_version: 1
+
 discovery:
   # Listing HTML hiện có đủ job links và pagination khi dùng requests.
   transport: requests

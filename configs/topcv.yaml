@@ -2,6 +2,10 @@ source: topcv
 source_adapter: joblake.sources.topcv.TopCVSource
 enabled: true
 
+cdc:
+  enabled: true
+  scope_version: 1
+
 discovery:
   # TopCV hiện chặn requests nên tạm dùng CloakBrowser.
   # Có thể đổi thành requests nếu endpoint hoạt động lại.

@@ -3,7 +3,8 @@
 The four source configs use `state.provider: postgres`. State lives in the
 existing JobLake PostgreSQL database, in schema `crawl_state`; parsed output
 continues to use `core` and `ref`. MinIO keeps the same immutable HTML objects.
-Airflow metadata remains in its own database. CDC/expiration is not implemented.
+Airflow metadata remains in its own database. Listing CDC is described in
+[URL CDC operation](url-cdc.md).
 
 ## Configuration
 

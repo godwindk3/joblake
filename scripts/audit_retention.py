@@ -66,7 +66,8 @@ def main():
                 psycopg.sql.SQL("SELECT count(*) FROM {}").format(
                     psycopg.sql.Identifier("crawl_state", table))
             ).fetchone()[0] for table in (
-                "crawl_runs", "discovery_targets", "jobs", "fetch_attempts", "raw_objects", "parse_attempts")}
+                "crawl_runs", "discovery_targets", "jobs", "fetch_attempts", "raw_objects", "parse_attempts",
+                "cdc_sources", "url_events")}
             print(json.dumps({"crawl_state": counts}), flush=True)
         return
     path = ROOT / config["state"]["database_path"]
