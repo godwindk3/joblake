@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from joblake.parsing.models import ParseContext
@@ -68,6 +69,55 @@ class ITviecParserTests(unittest.TestCase):
 
 
 class TopCVParserTests(unittest.TestCase):
+
+    def test_locations_from_job_posting_in_both_layouts(self) -> None:
+        posting = {
+            "@type": "JobPosting",
+            "jobLocation": [
+                {"address": {"streetAddress": "12 Duy Tân",
+                             "addressLocality": "Cầu Giấy",
+                             "addressRegion": "Hà Nội",
+                             "addressCountry": "VN"}},
+                {"address": "Quận 1, Hồ Chí Minh"},
+                {"address": "Quận 1, Hồ Chí Minh"},
+            ],
+        }
+        for marker in (
+            '<div id="job-detail" data-job-title="Engineer"></div>',
+            '<h2 class="premium-job-basic-information__content--title">Engineer</h2>',
+        ):
+            with self.subTest(marker=marker):
+                html = marker + '<script type="application/ld+json">' + json.dumps(
+                    {"@graph": [{"@type": "Organization", "address": "Company HQ"}, posting]}
+                ) + '</script>'
+                job = TopCVParser().parse(html, _context("topcv")).job
+                self.assertEqual(job.locations_raw, (
+                    "12 Duy Tân, Cầu Giấy, Hà Nội, VN", "Quận 1, Hồ Chí Minh",
+                ))
+
+    def test_location_section_fallback_in_both_layouts(self) -> None:
+        for marker, box, title, content in (
+            ('<div id="job-detail"></div>', 'box-job-information-detail-item',
+             'box-job-information-detail-item__title--title',
+             'box-job-information-detail-item__text'),
+            ('<h2 class="premium-job-basic-information__content--title">Engineer</h2>',
+             'premium-job-description__box', 'premium-job-description__box--title',
+             'premium-job-description__box--content'),
+        ):
+            with self.subTest(box=box):
+                html = f'''{marker}
+                <script type="application/ld+json">invalid JSON</script>
+                <div class="{box}"><h2 class="{title}">Địa điểm làm việc</h2>
+                <div class="{content}"><p>12 Duy Tân, Cầu Giấy, Hà Nội</p></div></div>'''
+                job = TopCVParser().parse(html, _context("topcv")).job
+                self.assertEqual(job.locations_raw, ("12 Duy Tân, Cầu Giấy, Hà Nội",))
+
+    def test_missing_location_does_not_use_company_address(self) -> None:
+        html = '''<div id="job-detail"></div>
+        <script type="application/ld+json">
+        {"@type":"Organization","address":"Company HQ"}
+        </script>'''
+        self.assertEqual(TopCVParser().parse(html, _context("topcv")).job.locations_raw, ())
 
     def test_parses_normal_layout_with_tuple_fields(self) -> None:
         html = """

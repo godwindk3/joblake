@@ -2,6 +2,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
 
+from joblake.parsing.locations import location_cities
+
 
 @dataclass(frozen=True, slots=True)
 class ParseContext:
@@ -41,6 +43,7 @@ class ParsedJob:
     skills_raw: tuple[str, ...] = ()
     benefit_items: tuple[str, ...] = ()
     locations_raw: tuple[str, ...] = ()
+    location_cities: tuple[str, ...] = field(init=False)
     source_external_job_id: str | None = None
     source_variant: str | None = None
     salary_raw: str | None = None
@@ -49,6 +52,9 @@ class ParsedJob:
     posted_at: datetime | None = None
     expires_at: datetime | None = None
     source_payload: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "location_cities", location_cities(self.locations_raw))
 
     def parsed_field_count(self) -> int:
         values = (

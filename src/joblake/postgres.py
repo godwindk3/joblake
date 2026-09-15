@@ -480,6 +480,7 @@ class PostgresRepository:
                 categories_raw,
                 skills_raw,
                 locations_raw,
+                location_cities,
                 benefit_items,
                 salary_raw,
                 employment_type_raw,
@@ -515,6 +516,7 @@ class PostgresRepository:
                 %(categories_raw)s,
                 %(skills_raw)s,
                 %(locations_raw)s,
+                %(location_cities)s,
                 %(benefit_items)s,
                 %(salary_raw)s,
                 %(employment_type_raw)s,
@@ -562,6 +564,7 @@ class PostgresRepository:
                 "locations_raw": list(
                     parsed_job.locations_raw
                 ),
+                "location_cities": list(parsed_job.location_cities),
                 "benefit_items": list(
                     parsed_job.benefit_items
                 ),

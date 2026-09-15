@@ -3,8 +3,9 @@
 > Đã bổ sung DAG VietnamWorks, TopDev và TopCV theo cùng runtime. Xem
 > [hướng dẫn bốn source](airflow-sources.md). `check_dag.py` hiện kiểm tra cả bốn DAG.
 
-Phạm vi: một DAG `joblake_itviec`, ba task `discovery -> detail -> parse`,
-trigger thủ công (`schedule=None`), không catchup, không retry toàn task.
+Phạm vi: một DAG `joblake_itviec`, ba phase `discovery -> detail -> parse`
+và task `watcher` ghi nhận lỗi. Trigger thủ công (`schedule=None`), không catchup,
+mỗi phase retry tối đa 2 lần; detail/parse dùng `all_done` để tiếp tục sau lỗi.
 Scheduler dùng LocalExecutor. Pool `joblake_serial` có một slot và DAG chỉ có
 một active run. Các DAG JobLake thêm sau cũng phải dùng pool này.
 
@@ -72,7 +73,7 @@ Record đã xử lý vẫn được giữ; CLI thường không có `--strict` g
 cũ. HTTP 410 được xử lý như URL đã mất vĩnh viễn, không làm fail batch.
 
 Sau khi sửa nguyên nhân, dùng Clear task trong UI để chạy lại bước lỗi và
-các bước downstream đang `upstream_failed`. Parse đọc HTML đã có trong MinIO,
+các bước downstream cần chạy lại cùng `watcher`. Parse đọc HTML đã có trong MinIO,
 không crawl lại website. Retry từng URL và thời điểm retry theo PostgreSQL/YAML;
 Clear task không bỏ qua `next_retry_at` hoặc giới hạn attempts. Một task thành
 công không có nghĩa toàn bộ backlog đã hết (có thể còn URL đang chờ retry).
@@ -102,7 +103,7 @@ python -m unittest discover -s tests
 docker compose -f orchestration/airflow/compose.yaml config --quiet
 ```
 
-`check_dag.py` kiểm tra import Airflow thật, dependency ba task, pool,
+`check_dag.py` kiểm tra import Airflow thật, dependency ba phase và watcher, pool,
 retry và strict flag. Cần chạy thêm một batch thực tế để xác nhận browser,
 network và quyền ghi state của môi trường Docker trên máy.
 

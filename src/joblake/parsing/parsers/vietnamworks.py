@@ -182,7 +182,7 @@ def _structured_text(value: Any) -> str | None:
 
 class VietnamWorksParser(JobParser):
     source = "vietnamworks"
-    version = "1.0.1"
+    version = "1.0.2"
 
     def parse(
         self,
