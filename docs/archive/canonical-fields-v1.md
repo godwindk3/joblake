@@ -1,3 +1,5 @@
+> Historical document. Describes the state or proposal at the time; use [current documentation](../README.md) for operation.
+
 # JobLake - Canonical Job Fields (v1)
 
 ## Metadata

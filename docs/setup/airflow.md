@@ -1,13 +1,6 @@
-# Chạy ITviec bằng Airflow local
+# Airflow local setup
 
-> Đã bổ sung DAG VietnamWorks, TopDev và TopCV theo cùng runtime. Xem
-> [hướng dẫn bốn source](airflow-sources.md). `check_dag.py` hiện kiểm tra cả bốn DAG.
-
-Phạm vi: một DAG `joblake_itviec`, ba phase `discovery -> detail -> parse`
-và task `watcher` ghi nhận lỗi. Trigger thủ công (`schedule=None`), không catchup,
-mỗi phase retry tối đa 2 lần; detail/parse dùng `all_done` để tiếp tục sau lỗi.
-Scheduler dùng LocalExecutor. Pool `joblake_serial` có một slot và DAG chỉ có
-một active run. Các DAG JobLake thêm sau cũng phải dùng pool này.
+Runtime dùng chung cho bốn DAG. Xem [vận hành các source](../operations/airflow-sources.md) để biết retry, pool, giới hạn và cách trigger.
 
 ## Chuẩn bị và chạy
 
@@ -30,7 +23,7 @@ docker compose -f orchestration/airflow/compose.yaml exec airflow-scheduler /opt
 ```
 
 Mở http://localhost:8080, tìm `joblake_itviec`, unpause rồi Trigger DAG.
-Task mặc định chỉ chạy khi bước trước thành công. Theo dõi log từng task.
+Detail và parse dùng `all_done`, nên vẫn chạy sau khi phase trước kết thúc với lỗi. Theo dõi log từng task.
 Cấu hình ITviec hiện để `detail.max_jobs_per_run: null`; lượt đầu có thể dài.
 Muốn thử ít, sửa giá trị này thành `5` trong `configs/itviec.yaml` trước khi
 trigger; discovery vẫn xử lý các target/page được cấu hình. Không tự giới hạn
@@ -64,13 +57,9 @@ ITviec thật; màn hình ảo không đảm bảo website sẽ không chặn.
 ## Kết quả và chạy lại
 
 Task gọi `python -m joblake.main --config configs/itviec.yaml --phase ... --strict`.
-`completed` trả thành công (kể cả không còn job mới); `blocked`, `failed` và
-`suspicious` trả exit code 1. Exception vẫn làm process thất bại.
+`completed` và `suspicious` trả thành công; `blocked` và `failed` trả exit code 1. Exception vẫn làm process thất bại.
 
-Chế độ strict cố ý yêu cầu xem lại cả lỗi một phần: discovery thiếu target,
-detail fetch/storage/validation lỗi, parse có rejected/failed/exhausted.
-Record đã xử lý vẫn được giữ; CLI thường không có `--strict` giữ cách thoát
-cũ. HTTP 410 được xử lý như URL đã mất vĩnh viễn, không làm fail batch.
+CLI dùng `--strict` trả lỗi khi kết quả cuối là `blocked` hoặc `failed`; `suspicious` vẫn thành công để scheduler tiếp tục các phase sau. Record đã xử lý vẫn được giữ. HTTP 410 được xử lý như URL đã mất vĩnh viễn.
 
 Sau khi sửa nguyên nhân, dùng Clear task trong UI để chạy lại bước lỗi và
 các bước downstream cần chạy lại cùng `watcher`. Parse đọc HTML đã có trong MinIO,
@@ -107,14 +96,3 @@ docker compose -f orchestration/airflow/compose.yaml config --quiet
 retry và strict flag. Cần chạy thêm một batch thực tế để xác nhận browser,
 network và quyền ghi state của môi trường Docker trên máy.
 
-### Kết quả kiểm tra ngày 2026-09-07
-
-- Docker image build thành công; Compose hợp lệ, API và scheduler healthy.
-- DAG import/dependency check qua trên Airflow 3.3.1; `joblake_itviec` đã được
-  đăng ký, để paused và chưa có lịch tự động.
-- 86 unit test qua cả trên Windows và trong venv Linux của image.
-- Smoke test dùng YAML tạm: một trang Hà Nội tìm được 20 URL, 12 URL mới.
-- Tổng cộng sáu detail đầu hàng đợi trả HTTP 410, được ghi là đã mất vĩnh viễn.
-  Parse chạy thành công nhưng `processed=0`; chưa xác nhận một bản ghi mới đi
-  hết đường browser -> MinIO -> PostgreSQL trong lần thử này.
-- Không sửa YAML ITviec gốc và không chạy Supabase sync.

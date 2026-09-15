@@ -7,12 +7,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends xvfb xauth \
 RUN mkdir -p /opt/joblake && chown airflow:0 /opt/joblake
 USER airflow
 WORKDIR /opt/joblake
-COPY --chown=airflow:0 pyproject.toml requirements.txt ./
+COPY --chown=airflow:0 pyproject.toml requirements.txt constraints.txt ./
 COPY --chown=airflow:0 src ./src
 # Keep crawler dependencies separate from Airflow's constrained environment.
 RUN python -m venv /opt/joblake/venv \
-    && /opt/joblake/venv/bin/pip install --no-cache-dir -r requirements.txt \
-    && /opt/joblake/venv/bin/pip install --no-cache-dir --no-deps -e .
+    && /opt/joblake/venv/bin/pip install --no-cache-dir -r requirements.txt
 USER root
 RUN /opt/joblake/venv/bin/python -m playwright install-deps chromium
 USER airflow

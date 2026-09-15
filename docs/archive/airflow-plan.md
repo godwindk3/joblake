@@ -1,8 +1,10 @@
+> Historical document. Describes the state or proposal at the time; use [current documentation](../README.md) for operation.
+
 # Kế hoạch đưa Apache Airflow vào JobLake
 
 > Cập nhật 2026-09-07: tài liệu bên dưới ghi lại giai đoạn setup ban đầu.
 > Repo đã thêm DAG ITviec và runtime JobLake. Hướng dẫn hiện hành nằm ở
-> [Airflow ITviec](airflow-itviec.md). Supabase sync tự động được để sau bốn source.
+> [Airflow ITviec](../setup/airflow.md). Supabase sync tự động được để sau bốn source.
 
 ## 1. Phạm vi hiện tại
 

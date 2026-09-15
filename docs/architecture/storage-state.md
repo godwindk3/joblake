@@ -1,7 +1,7 @@
 # MinIO raw storage and crawler state
 
 Current configs use PostgreSQL schema `crawl_state`. See
-[PostgreSQL state operation](postgres-state-migration.md). The SQLite details
+[PostgreSQL state operation](../operations/postgres-state-migration.md). The SQLite details
 below describe the retained legacy backend; queue and recovery behavior also
 apply to PostgreSQL, which uses Alembic and source-level run locks.
 

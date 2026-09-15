@@ -67,7 +67,7 @@ docker compose -f orchestration/airflow/compose.yaml exec airflow-dag-processor 
 Script kiểm tra cả bốn DAG với Airflow thật: import, dependency, mapping đúng
 source/phase/config, lịch thủ công, pool và giới hạn đồng thời. Lệnh này không
 crawl website hoặc ghi dữ liệu nghiệp vụ. Tham khảo
-[hướng dẫn runtime và storage](airflow-itviec.md) để setup từ đầu.
+[hướng dẫn runtime và storage](../setup/airflow.md) để setup từ đầu.
 
 Supabase vẫn chạy bằng CLI riêng và sync tất cả source. Chưa tự nối sync vào
 bốn DAG: cần phối hợp thời điểm sync/verify với các lượt parse trước khi tự

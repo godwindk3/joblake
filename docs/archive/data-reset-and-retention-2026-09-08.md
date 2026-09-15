@@ -1,3 +1,5 @@
+> Historical document. Describes the state or proposal at the time; use [current documentation](../README.md) for operation.
+
 # Reset dữ liệu và cơ chế hết hạn hiện tại
 
 ## Reset đã thực hiện ngày 2026-09-08
