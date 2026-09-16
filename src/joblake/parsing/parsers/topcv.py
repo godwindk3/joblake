@@ -4,6 +4,8 @@ from joblake.parsing.base import JobParser
 from joblake.parsing.common import (
     clean_items,
     clean_text,
+    find_job_posting,
+    json_ld_locations,
     split_comma_values,
     tag_text,
     text_without_leading_heading,
@@ -18,7 +20,7 @@ from joblake.parsing.models import (
 
 class TopCVParser(JobParser):
     source = "topcv"
-    version = "1.0.2"
+    version = "1.0.4"
 
     def parse(
         self,
@@ -82,6 +84,7 @@ def _parse_normal(soup: BeautifulSoup) -> ParsedJob:
         benefits_text=sections.get("Quyền lợi ứng viên"),
         domains_raw=domains,
         categories_raw=_job_categories(soup),
+        locations_raw=_locations(soup, sections),
         source_variant="normal",
     )
 
@@ -109,8 +112,33 @@ def _parse_premium(soup: BeautifulSoup) -> ParsedJob:
         benefits_text=sections.get("Quyền lợi ứng viên"),
         domains_raw=split_comma_values(keyword_content),
         categories_raw=_job_categories(soup),
+        locations_raw=_locations(soup, sections),
         source_variant="premium",
     )
+
+
+def _locations(
+    soup: BeautifulSoup,
+    sections: dict[str, str],
+) -> tuple[str, ...]:
+    # Current layout nests an h3 address list beside the working-time list.
+    for item in soup.select(".box-job-information-address-and-time-list__item"):
+        heading = tag_text(item.select_one(".box-job-information-address-and-time-list__item--title"))
+        if heading != "Địa điểm làm việc":
+            continue
+        content = item.select_one(".box-job-information-address-and-time-list__item--content")
+        if content is not None:
+            addresses = clean_items(tag_text(li) for li in content.select("li"))
+            if addresses:
+                return addresses
+            addresses = clean_items((tag_text(content),))
+            if addresses:
+                return addresses
+    locations = json_ld_locations(find_job_posting(soup) or {})
+    if locations:
+        return locations
+    # Keep the raw section intact: commas/newlines may be parts of one address.
+    return clean_items((sections.get("Địa điểm làm việc"),))
 
 
 def _job_categories(soup: BeautifulSoup) -> tuple[str, ...]:

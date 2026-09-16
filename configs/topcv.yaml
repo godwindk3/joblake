@@ -2,6 +2,10 @@ source: topcv
 source_adapter: joblake.sources.topcv.TopCVSource
 enabled: true
 
+cdc:
+  enabled: true
+  scope_version: 1
+
 discovery:
   # TopCV hiện chặn requests nên tạm dùng CloakBrowser.
   # Có thể đổi thành requests nếu endpoint hoạt động lại.
@@ -13,7 +17,7 @@ discovery:
   humanize: true
   # Direct connection: use the explicit locale/timezone below.
   geoip: false
-  challenge_wait_seconds: 30
+  challenge_wait_seconds: 60
   locale: vi-VN
   timezone_id: Asia/Ho_Chi_Minh
   storage_state_path: data/state/topcv_browser_state.json
@@ -26,8 +30,8 @@ discovery:
 
   retry:
     max_attempts: 3
-    base_delay_seconds: 10
-    max_delay_seconds: 60
+    base_delay_seconds: 90
+    max_delay_seconds: 180
 
   pagination:
     page_param: page
@@ -36,8 +40,8 @@ discovery:
     max_auto_pages: 200
 
   delay:
-    min_seconds: 5
-    max_seconds: 10
+    min_seconds: 10
+    max_seconds: 16
 
   proxy:
     enabled: false
@@ -73,7 +77,7 @@ detail:
 
   humanize: true
   geoip: false
-  challenge_wait_seconds: 30
+  challenge_wait_seconds: 60
   locale: vi-VN
   timezone_id: Asia/Ho_Chi_Minh
   storage_state_path: data/state/topcv_browser_state.json
@@ -86,8 +90,8 @@ detail:
 
   retry:
     max_attempts: 3
-    base_delay_seconds: 10
-    max_delay_seconds: 60
+    base_delay_seconds: 90
+    max_delay_seconds: 180
 
   validation:
     min_html_bytes: 5000
@@ -104,8 +108,8 @@ detail:
   max_jobs_per_run: null
 
   delay:
-    min_seconds: 15
-    max_seconds: 35
+    min_seconds: 7 
+    max_seconds: 15
 
   proxy:
     enabled: false
@@ -126,7 +130,7 @@ storage:
   store_discovery: false
 
 state:
-  provider: sqlite
+  provider: postgres
   database_path: data/state/joblake.db
   detail_max_attempts: 3
   detail_retry_delay_seconds: 3600

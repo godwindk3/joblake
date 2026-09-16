@@ -1897,19 +1897,18 @@ class FileStateStore:
             file.write(f"{url}\n")
 
 
-def create_state_store(config: dict) -> SQLiteStateStore:
+def create_state_store(config: dict) -> StateStore:
     provider = config["state"].get(
         "provider",
         "sqlite",
     )
 
-    if provider != "sqlite":
-        raise ValueError(
-            "The ingestion pipeline now requires "
-            "state.provider=sqlite"
-        )
-
-    return SQLiteStateStore.from_config(config)
+    if provider == "sqlite":
+        return SQLiteStateStore.from_config(config)
+    if provider == "postgres":
+        from joblake.postgres_state import PostgresStateStore
+        return PostgresStateStore.from_config(config)
+    raise ValueError(f"Unsupported state.provider: {provider}")
 
 
 def save_discovered_jobs(

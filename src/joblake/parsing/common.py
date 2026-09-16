@@ -307,13 +307,16 @@ def json_ld_locations(
             continue
         if not isinstance(address, dict):
             continue
+        country = address.get("addressCountry")
+        if isinstance(country, dict):
+            country = country.get("name")
         parts = [
             address.get("streetAddress"),
             address.get("addressLocality"),
             address.get("addressRegion"),
-            address.get("addressCountry"),
+            country,
         ]
-        cleaned_parts = [clean_text(part) for part in parts]
+        cleaned_parts = clean_items(part for part in parts if isinstance(part, str))
         value = ", ".join(part for part in cleaned_parts if part)
         if value:
             values.append(value)

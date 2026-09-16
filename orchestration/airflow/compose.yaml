@@ -1,6 +1,13 @@
 name: joblake-airflow
 
+x-log-rotation: &log-rotation
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 x-airflow-common: &airflow-common
+  logging: *log-rotation
   image: joblake-airflow:local
   build:
     context: ../..
@@ -43,6 +50,7 @@ x-airflow-common: &airflow-common
 
 services:
   airflow-postgres:
+    logging: *log-rotation
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${AIRFLOW_DB_NAME:-airflow}

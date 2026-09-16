@@ -2,6 +2,10 @@ source: topdev
 source_adapter: joblake.sources.topdev.TopDevSource
 enabled: true
 
+cdc:
+  enabled: true
+  scope_version: 1
+
 discovery:
   # Listing HTML hiện có đủ job links và pagination khi dùng requests.
   transport: requests
@@ -72,11 +76,11 @@ detail:
     required_path_prefixes:
       - /detail-jobs/
 
-  max_jobs_per_run: 20
+  max_jobs_per_run: null
 
   delay:
-    min_seconds: 10
-    max_seconds: 25
+    min_seconds: 5
+    max_seconds: 10
 
   proxy:
     enabled: false
@@ -97,7 +101,7 @@ storage:
   store_discovery: false
 
 state:
-  provider: sqlite
+  provider: postgres
   database_path: data/state/joblake.db
   detail_max_attempts: 3
   detail_retry_delay_seconds: 3600

@@ -21,11 +21,14 @@ class SchedulerCliTests(unittest.TestCase):
     def test_completed_and_empty_queue_are_success(self):
         self.invoke("completed")
 
-    def test_failed_blocked_and_partial_runs_fail_scheduler_task(self):
-        for status in ("failed", "blocked", "suspicious"):
+    def test_failed_and_blocked_runs_fail_scheduler_task(self):
+        for status in ("failed", "blocked"):
             with self.subTest(status=status), self.assertRaises(SystemExit) as result:
                 self.invoke(status)
             self.assertEqual(result.exception.code, 1)
+
+    def test_suspicious_run_allows_downstream_scheduler_phase(self):
+        self.invoke("suspicious")
 
     def test_manual_cli_keeps_existing_exit_behavior(self):
         self.invoke("suspicious", strict=False)

@@ -1,7 +1,7 @@
 import logging
 import random
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from joblake.models import (
@@ -42,6 +42,10 @@ class _TargetProgress:
     invalid_page_count: int = 0
     stopped_by_content_rule: bool = False
     reached_page_limit: bool = False
+    termination_reason: str = 'incomplete'
+    coverage_complete: bool = False
+    repeated_page: bool = False
+    seen_urls: set[str] = field(default_factory=set)
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +213,16 @@ class DiscoveryCrawler:
         status: str,
         error: Exception | None = None,
     ) -> None:
+        if error is not None:
+            progress.termination_reason = status
+        progress.coverage_complete = (
+            status == 'completed'
+            and progress.termination_reason in {'detected_last_page', 'confirmed_empty'}
+            and not progress.repeated_page
+            and progress.invalid_page_count == 0
+        )
+        if progress.repeated_page and error is None:
+            progress.termination_reason = 'repeated_page'
         if (
             self.state is None
             or progress.state_id is None
@@ -247,6 +261,9 @@ class DiscoveryCrawler:
                 else None
             ),
         )
+        if self.config.get('cdc', {}).get('enabled', False):
+            self.state.record_discovery_coverage(
+                progress.state_id, progress.coverage_complete, progress.termination_reason)
 
     def _crawl_target(
         self,
@@ -273,6 +290,7 @@ class DiscoveryCrawler:
         )
 
         if configured_total_pages is not None:
+            progress.termination_reason = 'configured_page_limit'
             progress.detected_last_page = (
                 start_page + configured_total_pages - 1
             )
@@ -306,6 +324,8 @@ class DiscoveryCrawler:
                 start_page=start_page,
                 delay=delay,
             )
+            if start_page != 1:
+                progress.termination_reason = 'partial_start_page'
             return
 
         if strategy != "detect_last_page":
@@ -383,6 +403,8 @@ class DiscoveryCrawler:
                 progress=progress,
             )
 
+        progress.termination_reason = 'detected_last_page' if start_page == 1 else 'partial_start_page'
+
     def _crawl_until_empty(
         self,
         *,
@@ -449,7 +471,7 @@ class DiscoveryCrawler:
             start_page,
             start_page + max_auto_pages,
         ):
-            previous_count = len(discovered_jobs)
+            previous_count = len(progress.seen_urls)
             request = self.source.build_listing_request(
                 target,
                 discovery_config,
@@ -463,7 +485,7 @@ class DiscoveryCrawler:
                 progress=progress,
             )
             in_run_new_count = (
-                len(discovered_jobs) - previous_count
+                len(progress.seen_urls) - previous_count
             )
 
             if not result.page_urls:
@@ -483,6 +505,8 @@ class DiscoveryCrawler:
                 >= stop_after_empty_pages
             ):
                 progress.stopped_by_content_rule = True
+                progress.termination_reason = ('confirmed_empty' if result.fetch_result.listing_end_confirmed
+                                               else 'unconfirmed_empty')
                 progress.detected_last_page = (
                     last_useful_page
                 )
@@ -500,6 +524,7 @@ class DiscoveryCrawler:
                 >= stop_after_stale_pages
             ):
                 progress.stopped_by_content_rule = True
+                progress.termination_reason = 'stale_pages'
                 progress.detected_last_page = (
                     last_useful_page
                 )
@@ -513,6 +538,7 @@ class DiscoveryCrawler:
 
         progress.detected_last_page = last_useful_page
         progress.reached_page_limit = True
+        progress.termination_reason = 'max_page_limit'
         LOGGER.warning(
             f"Target={target['name']}, reached "
             f"max_auto_pages={max_auto_pages} "
@@ -544,6 +570,12 @@ class DiscoveryCrawler:
             html=fetch_result.html,
             listing_url=fetch_result.final_url,
         )
+        if page_urls and not set(page_urls).difference(progress.seen_urls):
+            progress.repeated_page = True
+        progress.seen_urls.update(page_urls)
+        if ((not page_urls and not fetch_result.listing_end_confirmed)
+                or (fetch_result.status_code is not None and not 200 <= fetch_result.status_code < 300)):
+            progress.invalid_page_count += 1
         discovered_at = _utc_now()
         page_records = [
             DiscoveryRecord(
@@ -589,12 +621,13 @@ class DiscoveryCrawler:
 
         self.new_job_count += persisted_new_count
 
-        LOGGER.debug(
-            f"Target={request.target_name}, "
-            f"page={request.page_number}, "
-            f"found={len(page_urls)}, "
-            f"new={persisted_new_count}, "
-            f"run_unique={len(discovered_jobs)}"
+        LOGGER.info(
+            "Target=%s, page=%s, found=%s, new=%s, run_unique=%s",
+            request.target_name,
+            request.page_number,
+            len(page_urls),
+            persisted_new_count,
+            len(discovered_jobs),
         )
 
         time.sleep(

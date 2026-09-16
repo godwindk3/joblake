@@ -1,6 +1,7 @@
 **
 !pyproject.toml
 !requirements.txt
+!constraints.txt
 !src/
 !src/**
 !orchestration/

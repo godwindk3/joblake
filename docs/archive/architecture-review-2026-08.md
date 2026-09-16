@@ -1,3 +1,5 @@
+> Historical document. Describes the state or proposal at the time; use [current documentation](../README.md) for operation.
+
 # JobLake - Review kiến trúc (2026-08)
 
 Phạm vi: toàn bộ `src/joblake`, `configs/`, `tests/`, `docs/`.

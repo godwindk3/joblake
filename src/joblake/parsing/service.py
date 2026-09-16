@@ -105,6 +105,13 @@ class ParseService:
                 break
 
             processed += 1
+            LOGGER.info(
+                "Parse %s%s: job_id=%s url=%s",
+                processed,
+                f"/{max_jobs}" if max_jobs is not None else "",
+                claim.job_id,
+                claim.canonical_url,
+            )
             outcome = self._process_claim(claim)
 
             if outcome == "accepted":
@@ -169,6 +176,8 @@ class ParseService:
                 ),
                 integrity_status="size_mismatch",
             )
+            LOGGER.error("Parse failed: job_id=%s url=%s error=RawSizeMismatch expected=%s actual=%s",
+                         claim.job_id, claim.canonical_url, claim.expected_size, len(content))
             return "failed"
 
         actual_sha256 = hashlib.sha256(content).hexdigest()
@@ -184,6 +193,8 @@ class ParseService:
                 ),
                 integrity_status="hash_mismatch",
             )
+            LOGGER.error("Parse failed: job_id=%s url=%s error=RawHashMismatch",
+                         claim.job_id, claim.canonical_url)
             return "failed"
 
         try:
@@ -221,6 +232,8 @@ class ParseService:
                 ),
                 warnings=issue_dicts,
             )
+            LOGGER.warning("Parse rejected: job_id=%s url=%s reason=%s",
+                           claim.job_id, claim.canonical_url, _issues_message(assessment.issues))
             return "rejected"
 
         parsed_at = _utc_now()
@@ -264,8 +277,9 @@ class ParseService:
             warnings=issue_dicts,
             output_location=stored.output_location,
         )
-        LOGGER.debug(
-            f"Parsed {assessment.status}: {claim.canonical_url}"
+        LOGGER.info(
+            "Parsed %s: job_id=%s url=%s",
+            assessment.status, claim.job_id, claim.canonical_url,
         )
         return assessment.status
 

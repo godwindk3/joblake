@@ -1,4 +1,9 @@
-# MinIO raw storage and SQLite state
+# MinIO raw storage and crawler state
+
+Current configs use PostgreSQL schema `crawl_state`. See
+[PostgreSQL state operation](../operations/postgres-state-migration.md). The SQLite details
+below describe the retained legacy backend; queue and recovery behavior also
+apply to PostgreSQL, which uses Alembic and source-level run locks.
 
 JobLake uses MinIO for immutable raw detail HTML, SQLite for crawl and
 parse state, and PostgreSQL for accepted normalized job records.

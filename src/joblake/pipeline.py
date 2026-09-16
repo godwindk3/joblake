@@ -1,6 +1,7 @@
 import logging
 import random
 import time
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 
 from joblake.discovery import DiscoveryCrawler
@@ -56,6 +57,11 @@ class IngestionPipeline:
         self._detail_error_count = 0
 
     def run(self, phase: str = "full") -> str:
+        source_run = getattr(self.state, "source_run", None)
+        with source_run(self.source.name) if source_run else nullcontext():
+            return self._run_locked(phase)
+
+    def _run_locked(self, phase: str) -> str:
         if phase not in {
             "full",
             "discovery",
@@ -67,10 +73,21 @@ class IngestionPipeline:
                 "full, discovery, detail, parse"
             )
 
+        if (self.config.get('cdc', {}).get('enabled', False)
+                and self.config.get('state', {}).get('provider') != 'postgres'):
+            raise ValueError('CDC requires state.provider=postgres')
+
         run_id = self.state.start_run(
             self.source.name,
             _utc_now(),
         )
+        if self.config.get('state', {}).get('provider') == 'postgres':
+            try:
+                self.state.prepare_cdc_run(run_id, phase, self.config)
+            except Exception as exc:
+                self._finish_failed_run(run_id, status='failed', error=exc,
+                                        discovered_url_count=0, new_url_count=0)
+                raise
         LOGGER.info("Run started: run_id=%s source=%s phase=%s", run_id, self.source.name, phase)
         crawler: DiscoveryCrawler | None = None
         discovered_url_count = 0
@@ -102,6 +119,11 @@ class IngestionPipeline:
                     "========== PHASE 1: DISCOVERY =========="
                 )
                 crawler.run()
+                if self.config.get('cdc', {}).get('enabled', False):
+                    summary = self.state.finalize_cdc(run_id, _utc_now())
+                    LOGGER.info('CDC: run_id=%s status=%s expired=%s reappeared=%s reason=%s',
+                                run_id, summary['status'], summary['expired'],
+                                summary['reappeared'], summary['reason'])
                 discovered_url_count = len(
                     crawler.run_records
                 )
@@ -316,14 +338,11 @@ class IngestionPipeline:
                     break
 
                 processed += 1
-                LOGGER.debug(
-                    f"Detail {processed}"
-                    + (
-                        f"/{max_jobs}"
-                        if max_jobs is not None
-                        else ""
-                    )
-                    + f": {claim.record.url}"
+                LOGGER.info(
+                    "Detail %s%s: %s",
+                    processed,
+                    f"/{max_jobs}" if max_jobs is not None else "",
+                    claim.record.url,
                 )
 
                 if not self._crawl_detail(
@@ -420,10 +439,10 @@ class IngestionPipeline:
                 completed_at=_utc_now(),
             )
 
-            LOGGER.debug(
-                "Raw detail ready: "
-                f"{stored.locator.bucket_name}/"
-                f"{stored.locator.object_key}"
+            LOGGER.info(
+                "Raw detail ready: %s/%s",
+                stored.locator.bucket_name,
+                stored.locator.object_key,
             )
 
         except SourceBlockedError as exc:
@@ -488,7 +507,8 @@ class IngestionPipeline:
 
         except Exception as exc:
             self.state.fail_attempt(
-                # Record-level failures remain restartable, but visible to --strict.
+                # Record-level failures remain restartable and make the run
+                # suspicious without preventing downstream scheduler phases.
                 claim=claim,
                 attempt_status="storage_error",
                 completed_at=_utc_now(),

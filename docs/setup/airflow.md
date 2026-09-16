@@ -1,12 +1,6 @@
-# Chạy ITviec bằng Airflow local
+# Airflow local setup
 
-> Đã bổ sung DAG VietnamWorks, TopDev và TopCV theo cùng runtime. Xem
-> [hướng dẫn bốn source](airflow-sources.md). `check_dag.py` hiện kiểm tra cả bốn DAG.
-
-Phạm vi: một DAG `joblake_itviec`, ba task `discovery -> detail -> parse`,
-trigger thủ công (`schedule=None`), không catchup, không retry toàn task.
-Scheduler dùng LocalExecutor. Pool `joblake_serial` có một slot và DAG chỉ có
-một active run. Các DAG JobLake thêm sau cũng phải dùng pool này.
+Runtime dùng chung cho bốn DAG. Xem [vận hành các source](../operations/airflow-sources.md) để biết retry, pool, giới hạn và cách trigger.
 
 ## Chuẩn bị và chạy
 
@@ -29,7 +23,7 @@ docker compose -f orchestration/airflow/compose.yaml exec airflow-scheduler /opt
 ```
 
 Mở http://localhost:8080, tìm `joblake_itviec`, unpause rồi Trigger DAG.
-Task mặc định chỉ chạy khi bước trước thành công. Theo dõi log từng task.
+Detail và parse dùng `all_done`, nên vẫn chạy sau khi phase trước kết thúc với lỗi. Theo dõi log từng task.
 Cấu hình ITviec hiện để `detail.max_jobs_per_run: null`; lượt đầu có thể dài.
 Muốn thử ít, sửa giá trị này thành `5` trong `configs/itviec.yaml` trước khi
 trigger; discovery vẫn xử lý các target/page được cấu hình. Không tự giới hạn
@@ -39,7 +33,7 @@ hay đổi target trong DAG.
 
 - `configs/` và `src/` mount read-only từ host: YAML và code Python mới được
   đọc ở lần task khởi động tiếp theo, không cần restart Airflow.
-- `data/state/` mount read-write: dùng đúng SQLite và browser state hiện có,
+- `data/state/` mount read-write: giữ browser state và bản SQLite dự phòng,
   giữ được dữ liệu khi tạo lại container. Không chạy CLI host đồng thời trên
   cùng state, vì pool chỉ điều phối task Airflow.
 - Root `.env` mount read-only và CLI đọc lúc khởi động. Không copy secret
@@ -63,17 +57,13 @@ ITviec thật; màn hình ảo không đảm bảo website sẽ không chặn.
 ## Kết quả và chạy lại
 
 Task gọi `python -m joblake.main --config configs/itviec.yaml --phase ... --strict`.
-`completed` trả thành công (kể cả không còn job mới); `blocked`, `failed` và
-`suspicious` trả exit code 1. Exception vẫn làm process thất bại.
+`completed` và `suspicious` trả thành công; `blocked` và `failed` trả exit code 1. Exception vẫn làm process thất bại.
 
-Chế độ strict cố ý yêu cầu xem lại cả lỗi một phần: discovery thiếu target,
-detail fetch/storage/validation lỗi, parse có rejected/failed/exhausted.
-Record đã xử lý vẫn được giữ; CLI thường không có `--strict` giữ cách thoát
-cũ. HTTP 410 được xử lý như URL đã mất vĩnh viễn, không làm fail batch.
+CLI dùng `--strict` trả lỗi khi kết quả cuối là `blocked` hoặc `failed`; `suspicious` vẫn thành công để scheduler tiếp tục các phase sau. Record đã xử lý vẫn được giữ. HTTP 410 được xử lý như URL đã mất vĩnh viễn.
 
 Sau khi sửa nguyên nhân, dùng Clear task trong UI để chạy lại bước lỗi và
-các bước downstream đang `upstream_failed`. Parse đọc HTML đã có trong MinIO,
-không crawl lại website. Retry từng URL và thời điểm retry vẫn theo SQLite/YAML;
+các bước downstream cần chạy lại cùng `watcher`. Parse đọc HTML đã có trong MinIO,
+không crawl lại website. Retry từng URL và thời điểm retry theo PostgreSQL/YAML;
 Clear task không bỏ qua `next_retry_at` hoặc giới hạn attempts. Một task thành
 công không có nghĩa toàn bộ backlog đã hết (có thể còn URL đang chờ retry).
 Record exhausted cần được xử lý theo state/parser policy, không chỉ Clear DAG.
@@ -102,18 +92,7 @@ python -m unittest discover -s tests
 docker compose -f orchestration/airflow/compose.yaml config --quiet
 ```
 
-`check_dag.py` kiểm tra import Airflow thật, dependency ba task, pool,
+`check_dag.py` kiểm tra import Airflow thật, dependency ba phase và watcher, pool,
 retry và strict flag. Cần chạy thêm một batch thực tế để xác nhận browser,
 network và quyền ghi state của môi trường Docker trên máy.
 
-### Kết quả kiểm tra ngày 2026-09-07
-
-- Docker image build thành công; Compose hợp lệ, API và scheduler healthy.
-- DAG import/dependency check qua trên Airflow 3.3.1; `joblake_itviec` đã được
-  đăng ký, để paused và chưa có lịch tự động.
-- 86 unit test qua cả trên Windows và trong venv Linux của image.
-- Smoke test dùng YAML tạm: một trang Hà Nội tìm được 20 URL, 12 URL mới.
-- Tổng cộng sáu detail đầu hàng đợi trả HTTP 410, được ghi là đã mất vĩnh viễn.
-  Parse chạy thành công nhưng `processed=0`; chưa xác nhận một bản ghi mới đi
-  hết đường browser -> MinIO -> PostgreSQL trong lần thử này.
-- Không sửa YAML ITviec gốc và không chạy Supabase sync.

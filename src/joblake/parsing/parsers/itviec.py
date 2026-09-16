@@ -3,6 +3,8 @@ from bs4 import BeautifulSoup, Tag
 from joblake.parsing.base import JobParser
 from joblake.parsing.common import (
     clean_items,
+    find_job_posting,
+    json_ld_locations,
     tag_text,
     text_without_leading_heading,
 )
@@ -11,7 +13,7 @@ from joblake.parsing.models import ParseContext, ParsedJob, ParserOutput
 
 class ITviecParser(JobParser):
     source = "itviec"
-    version = "1.0.1"
+    version = "1.0.2"
 
     def parse(
         self,
@@ -80,8 +82,18 @@ class ITviecParser(JobParser):
                         else ()
                     )
                 ),
+                locations_raw=_locations(soup),
             )
         )
+
+
+def _locations(soup: BeautifulSoup) -> tuple[str, ...]:
+    # The visible job address can be newer than the JSON-LD administrative names.
+    addresses = clean_items(
+        tag_text(link.parent.select_one("span.normal-text"))
+        for link in soup.select('.job-show-info a[href^="https://www.google.com/maps?"]')
+    )
+    return addresses or json_ld_locations(find_job_posting(soup) or {})
 
 
 def _find_section(
