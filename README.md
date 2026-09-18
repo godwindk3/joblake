@@ -1,6 +1,6 @@
 # JobLake
 
-Collect job listings from ITviec, TopCV, TopDev and VietnamWorks. Raw HTML lives in MinIO; crawl state and parsed records live in PostgreSQL.
+Collect job listings from ITviec, TopCV, TopDev, VietnamWorks and Devwork. Raw HTML lives in MinIO; crawl state and parsed records live in PostgreSQL.
 
 ## Start here
 
@@ -18,6 +18,7 @@ python -m joblake.main --config configs/topdev.yaml --phase parse
 - [Documentation index](docs/README.md)
 - [Current architecture](docs/architecture/overview.md)
 - [Airflow setup](docs/setup/airflow.md)
+- [Devwork source and validation](docs/operations/devwork.md)
 - [Development and tests](docs/development/testing.md)
 - [Maintenance scripts](scripts/README.md)
 

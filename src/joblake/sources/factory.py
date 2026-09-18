@@ -4,6 +4,7 @@ from joblake.sources.base import JobSource
 
 
 DEFAULT_ADAPTERS = {
+    "devwork": "joblake.sources.devwork.DevworkSource",
     "itviec": "joblake.sources.itviec.ITviecSource",
     "topcv": "joblake.sources.topcv.TopCVSource",
     "topdev": "joblake.sources.topdev.TopDevSource",

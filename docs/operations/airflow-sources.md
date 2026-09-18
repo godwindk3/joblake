@@ -1,4 +1,4 @@
-# Airflow cho bốn website
+# Airflow cho các nguồn website
 
 Mỗi website có một DAG riêng, cùng luồng `discovery -> detail -> parse`.
 
@@ -8,6 +8,10 @@ Mỗi website có một DAG riêng, cùng luồng `discovery -> detail -> parse`
 | `joblake_vietnamworks` | `configs/vietnamworks.yaml` | 20/lượt |
 | `joblake_topdev` | `configs/topdev.yaml` | 20/lượt |
 | `joblake_topcv` | `configs/topcv.yaml` | `null`: toàn bộ URL đủ điều kiện |
+| `joblake_devwork` | `configs/devwork.yaml` | `null`: toàn bộ URL đủ điều kiện |
+
+Devwork dùng HTTP requests cho cả discovery và detail, DAG mặc định paused.
+Xem [phạm vi, phân trang và dữ liệu Devwork](devwork.md).
 
 Giới hạn trên là giá trị YAML lúc tích hợp; thay `detail.max_jobs_per_run`
 trong config tương ứng nếu muốn thử ít hơn. Discovery và parse vẫn theo các
@@ -23,9 +27,9 @@ dùng Xvfb và cấu hình browser hiện có.
 3. Theo dõi từng task; task lỗi tự retry tối đa 2 lần. Nếu vẫn lỗi, sửa nguyên
    nhân rồi Clear task lỗi, các phase sau cần chạy lại và `watcher`.
 
-Cả bốn DAG đều `schedule=None`, `catchup=False`, không có lịch tự động.
-Ba DAG mới được tạo ở trạng thái paused. Mỗi DAG có tối đa một active run
-và một active task. Cả bốn dùng pool `joblake_serial` một slot: dù trigger
+Cả năm DAG đều `schedule=None`, `catchup=False`, không có lịch tự động.
+Các DAG mới được tạo ở trạng thái paused. Mỗi DAG có tối đa một active run
+và một active task. Cả năm dùng pool `joblake_serial` một slot: dù trigger
 nhiều website, chỉ một task JobLake chạy tại một thời điểm. Các task thuộc
 những website khác nhau có thể xen kẽ giữa các phase.
 
@@ -64,11 +68,11 @@ khởi động lại lượt chạy cũ.
 docker compose -f orchestration/airflow/compose.yaml exec airflow-dag-processor python /opt/airflow/check_dag.py
 ```
 
-Script kiểm tra cả bốn DAG với Airflow thật: import, dependency, mapping đúng
+Script kiểm tra cả năm DAG với Airflow thật: import, dependency, mapping đúng
 source/phase/config, lịch thủ công, pool và giới hạn đồng thời. Lệnh này không
 crawl website hoặc ghi dữ liệu nghiệp vụ. Tham khảo
 [hướng dẫn runtime và storage](../setup/airflow.md) để setup từ đầu.
 
 Supabase vẫn chạy bằng CLI riêng và sync tất cả source. Chưa tự nối sync vào
-bốn DAG: cần phối hợp thời điểm sync/verify với các lượt parse trước khi tự
+các DAG: cần phối hợp thời điểm sync/verify với các lượt parse trước khi tự
 động hóa; một pool theo task không đảm bảo parse không chen giữa sync và verify.
