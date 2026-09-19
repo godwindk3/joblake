@@ -9,7 +9,7 @@ import time
 
 LOGGER = logging.getLogger(__name__)
 DAG_IDS = tuple(f"joblake_{s}" for s in (
-    "itviec", "topcv", "topdev", "vietnamworks", "devwork", "log_cleanup",
+    "itviec", "topcv", "topdev", "vietnamworks", "devwork", "careerviet", "log_cleanup",
 ))
 
 

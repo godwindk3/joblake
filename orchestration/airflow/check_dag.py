@@ -3,7 +3,7 @@ import shlex
 from datetime import timedelta
 from airflow.dag_processing.dagbag import DagBag
 
-for source in ("itviec", "vietnamworks", "topdev", "topcv", "devwork"):
+for source in ("itviec", "vietnamworks", "topdev", "topcv", "devwork", "careerviet"):
     dag_id = f"joblake_{source}"
     bag = DagBag(dag_folder=f"/opt/airflow/dags/{dag_id}.py")
     assert not bag.import_errors, bag.import_errors

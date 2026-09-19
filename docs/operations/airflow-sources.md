@@ -9,6 +9,10 @@ Mỗi website có một DAG riêng, cùng luồng `discovery -> detail -> parse`
 | `joblake_topdev` | `configs/topdev.yaml` | 20/lượt |
 | `joblake_topcv` | `configs/topcv.yaml` | `null`: toàn bộ URL đủ điều kiện |
 | `joblake_devwork` | `configs/devwork.yaml` | `null`: toàn bộ URL đủ điều kiện |
+| `joblake_careerviet` | `configs/careerviet.yaml` | `null`: toàn bộ URL đủ điều kiện |
+
+CareerViet dùng requests với User-Agent `JobLake/0.1`, phạm vi ngành CNTT -
+Phần mềm và DAG mặc định paused. Xem [hướng dẫn CareerViet](careerviet.md).
 
 Devwork dùng HTTP requests cho cả discovery và detail, DAG mặc định paused.
 Xem [phạm vi, phân trang và dữ liệu Devwork](devwork.md).
@@ -27,9 +31,9 @@ dùng Xvfb và cấu hình browser hiện có.
 3. Theo dõi từng task; task lỗi tự retry tối đa 2 lần. Nếu vẫn lỗi, sửa nguyên
    nhân rồi Clear task lỗi, các phase sau cần chạy lại và `watcher`.
 
-Cả năm DAG đều `schedule=None`, `catchup=False`, không có lịch tự động.
+Cả sáu DAG đều `schedule=None`, `catchup=False`, không có lịch tự động.
 Các DAG mới được tạo ở trạng thái paused. Mỗi DAG có tối đa một active run
-và một active task. Cả năm dùng pool `joblake_serial` một slot: dù trigger
+và một active task. Cả sáu dùng pool `joblake_serial` một slot: dù trigger
 nhiều website, chỉ một task JobLake chạy tại một thời điểm. Các task thuộc
 những website khác nhau có thể xen kẽ giữa các phase.
 
@@ -68,7 +72,7 @@ khởi động lại lượt chạy cũ.
 docker compose -f orchestration/airflow/compose.yaml exec airflow-dag-processor python /opt/airflow/check_dag.py
 ```
 
-Script kiểm tra cả năm DAG với Airflow thật: import, dependency, mapping đúng
+Script kiểm tra cả sáu DAG với Airflow thật: import, dependency, mapping đúng
 source/phase/config, lịch thủ công, pool và giới hạn đồng thời. Lệnh này không
 crawl website hoặc ghi dữ liệu nghiệp vụ. Tham khảo
 [hướng dẫn runtime và storage](../setup/airflow.md) để setup từ đầu.

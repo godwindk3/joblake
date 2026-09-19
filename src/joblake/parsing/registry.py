@@ -4,6 +4,7 @@ from joblake.parsing.base import JobParser
 
 
 _DEFAULT_PARSERS = {
+    "careerviet": "joblake.parsing.parsers.careerviet.CareerVietParser",
     "devwork": "joblake.parsing.parsers.devwork.DevworkParser",
     "itviec": "joblake.parsing.parsers.itviec.ITviecParser",
     "topcv": "joblake.parsing.parsers.topcv.TopCVParser",
