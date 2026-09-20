@@ -3,7 +3,7 @@ import shlex
 from datetime import timedelta
 from airflow.dag_processing.dagbag import DagBag
 
-for source in ("itviec", "vietnamworks", "topdev", "topcv", "devwork", "careerviet"):
+for source in ("itviec", "vietnamworks", "topdev", "topcv", "devwork", "careerviet", "vieclam24h", "careerlink", "jobsgo"):
     dag_id = f"joblake_{source}"
     bag = DagBag(dag_folder=f"/opt/airflow/dags/{dag_id}.py")
     assert not bag.import_errors, bag.import_errors
@@ -20,6 +20,7 @@ for source in ("itviec", "vietnamworks", "topdev", "topcv", "devwork", "careervi
     assert watcher.trigger_rule == "one_failed"
     assert watcher.retries == 0
     assert watcher.pool == "joblake_serial"
+    assert watcher.pool_slots == 1
     assert not watcher.do_xcom_push
     assert watcher.bash_command.endswith("exit 1")
     assert dag.schedule is None
@@ -31,6 +32,7 @@ for source in ("itviec", "vietnamworks", "topdev", "topcv", "devwork", "careervi
         assert dag.is_paused_upon_creation is True
     for task in (dag.get_task(phase) for phase in ("discovery", "detail", "parse")):
         assert task.pool == "joblake_serial"
+        assert task.pool_slots == 1
         assert task.retries == 2
         assert task.retry_delay == timedelta(minutes=5)
         assert task.retry_exponential_backoff is True
@@ -44,3 +46,10 @@ for source in ("itviec", "vietnamworks", "topdev", "topcv", "devwork", "careervi
             "--phase", task.task_id, "--strict",
         ], task.bash_command
     print(f"{dag_id}: import, config mapping and scheduling checks passed")
+
+bag = DagBag(dag_folder="/opt/airflow/dags/joblake_raw_cleanup.py")
+assert not bag.import_errors, bag.import_errors
+cleanup = bag.dags["joblake_raw_cleanup"].get_task("cleanup_raw")
+assert cleanup.pool == "joblake_serial"
+assert cleanup.pool_slots == 3
+print("joblake_raw_cleanup: reserves all three shared pool slots")

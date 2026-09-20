@@ -10,6 +10,18 @@ Mỗi website có một DAG riêng, cùng luồng `discovery -> detail -> parse`
 | `joblake_topcv` | `configs/topcv.yaml` | `null`: toàn bộ URL đủ điều kiện |
 | `joblake_devwork` | `configs/devwork.yaml` | `null`: toàn bộ URL đủ điều kiện |
 | `joblake_careerviet` | `configs/careerviet.yaml` | `null`: toàn bộ URL đủ điều kiện |
+| `joblake_vieclam24h` | `configs/vieclam24h.yaml` | `null`: toàn bộ URL đủ điều kiện |
+| `joblake_careerlink` | `configs/careerlink.yaml` | `null`: toàn bộ URL đủ điều kiện |
+| `joblake_jobsgo` | `configs/jobsgo.yaml` | `null`: toàn bộ URL đủ điều kiện |
+
+JobsGO dùng requests, giữ query `slug` và phân trang bằng `page`.
+DAG mặc định paused. Xem [hướng dẫn JobsGO](jobsgo.md).
+
+CareerLink dùng requests, trang đầu là URL gốc và phân trang qua `page`.
+DAG mặc định paused. Xem [hướng dẫn CareerLink](careerlink.md).
+
+Vieclam24h dùng requests, query `page` và giữ `sort_q`; DAG mặc định paused.
+Xem [hướng dẫn Vieclam24h](vieclam24h.md).
 
 CareerViet dùng requests với User-Agent `JobLake/0.1`, phạm vi ngành CNTT -
 Phần mềm và DAG mặc định paused. Xem [hướng dẫn CareerViet](careerviet.md).
@@ -31,11 +43,22 @@ dùng Xvfb và cấu hình browser hiện có.
 3. Theo dõi từng task; task lỗi tự retry tối đa 2 lần. Nếu vẫn lỗi, sửa nguyên
    nhân rồi Clear task lỗi, các phase sau cần chạy lại và `watcher`.
 
-Cả sáu DAG đều `schedule=None`, `catchup=False`, không có lịch tự động.
+Cả chín DAG đều `schedule=None`, `catchup=False`, không có lịch tự động.
 Các DAG mới được tạo ở trạng thái paused. Mỗi DAG có tối đa một active run
-và một active task. Cả sáu dùng pool `joblake_serial` một slot: dù trigger
-nhiều website, chỉ một task JobLake chạy tại một thời điểm. Các task thuộc
-những website khác nhau có thể xen kẽ giữa các phase.
+và một active task. Cả chín dùng pool `joblake_serial` ba slot (giữ tên pool
+cũ để tương thích): tối đa ba task của ba website chạy song song bằng
+LocalExecutor. Task chờ được chạy khi có slot trống; không chia cố định website
+cho worker. Mỗi website vẫn chạy tuần tự discovery → detail → parse.
+Raw cleanup chiếm cả ba slot để không chạy đồng thời với ingestion.
+
+Khởi tạo Airflow tự đặt pool thành ba slot. Với runtime đã chạy, áp dụng bằng:
+
+```powershell
+docker compose -f orchestration/airflow/compose.yaml exec airflow-scheduler airflow pools set joblake_serial 3 'Up to three JobLake tasks across sources; cleanup reserves all slots'
+```
+
+Trên UI, trigger các DAG nguồn cần chạy; tối đa ba task chạy, phần còn lại chờ.
+Giới hạn này áp dụng cho task Airflow, không giới hạn các lệnh CLI chạy riêng.
 
 CLI gọi với `--strict`; kết quả `failed`/`blocked` hoặc exception làm task đỏ.
 `suspicious` vẫn exit 0, không kích hoạt Airflow retry. Retry từng URL do
@@ -72,7 +95,7 @@ khởi động lại lượt chạy cũ.
 docker compose -f orchestration/airflow/compose.yaml exec airflow-dag-processor python /opt/airflow/check_dag.py
 ```
 
-Script kiểm tra cả sáu DAG với Airflow thật: import, dependency, mapping đúng
+Script kiểm tra cả chín DAG với Airflow thật: import, dependency, mapping đúng
 source/phase/config, lịch thủ công, pool và giới hạn đồng thời. Lệnh này không
 crawl website hoặc ghi dữ liệu nghiệp vụ. Tham khảo
 [hướng dẫn runtime và storage](../setup/airflow.md) để setup từ đầu.

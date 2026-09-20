@@ -4,6 +4,9 @@ from joblake.parsing.base import JobParser
 
 
 _DEFAULT_PARSERS = {
+    "jobsgo": "joblake.parsing.parsers.jobsgo.JobsGoParser",
+    "careerlink": "joblake.parsing.parsers.careerlink.CareerLinkParser",
+    "vieclam24h": "joblake.parsing.parsers.vieclam24h.Vieclam24hParser",
     "careerviet": "joblake.parsing.parsers.careerviet.CareerVietParser",
     "devwork": "joblake.parsing.parsers.devwork.DevworkParser",
     "itviec": "joblake.parsing.parsers.itviec.ITviecParser",

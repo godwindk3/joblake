@@ -255,6 +255,15 @@ class PostgresStateStore(PostgresCdcMixin):
                         ),
                     )
 
+            # Any newly observed purged job needs a fresh raw generation, even
+            # when discovery coverage is incomplete and CDC cannot finalize.
+            connection.execute("""UPDATE crawl_state.jobs j
+                SET raw_status='pending', fetch_retry_base=fetch_attempt_count,
+                    next_retry_at=NULL, last_error_type=NULL, last_error_message=NULL
+                FROM crawl_state.raw_objects r
+                WHERE r.job_id=j.id AND r.purged_at IS NOT NULL
+                  AND j.last_seen_run_id=%s AND j.raw_status='storage_missing'""", (run_id,))
+
         return new_count
 
     def claim_next_job(
@@ -279,7 +288,7 @@ class PostgresStateStore(PostgresCdcMixin):
                       'retryable_error',
                       'blocked'
                   )
-                  AND fetch_attempt_count < %s
+                  AND fetch_attempt_count - fetch_retry_base < %s
                   AND (
                       next_retry_at IS NULL
                       OR next_retry_at <= %s
@@ -488,6 +497,26 @@ class PostgresStateStore(PostgresCdcMixin):
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, 'valid'
                 )
+                ON CONFLICT (job_id) DO UPDATE SET
+                    storage_provider=EXCLUDED.storage_provider,
+                    bucket_name=EXCLUDED.bucket_name,
+                    object_key=EXCLUDED.object_key,
+                    object_version=EXCLUDED.object_version,
+                    requested_url=EXCLUDED.requested_url,
+                    final_url=EXCLUDED.final_url,
+                    http_status=EXCLUDED.http_status,
+                    content_type=EXCLUDED.content_type,
+                    content_length_bytes=EXCLUDED.content_length_bytes,
+                    content_sha256=EXCLUDED.content_sha256,
+                    fetched_at=EXCLUDED.fetched_at,
+                    stored_at=EXCLUDED.stored_at,
+                    validation_version=EXCLUDED.validation_version,
+                    validation_report=EXCLUDED.validation_report,
+                    last_integrity_check_at=EXCLUDED.last_integrity_check_at,
+                    integrity_status=EXCLUDED.integrity_status,
+                    purged_at=NULL, refreshed_at=CURRENT_TIMESTAMP
+                WHERE crawl_state.raw_objects.purged_at IS NOT NULL
+                   OR crawl_state.raw_objects.content_sha256 <> EXCLUDED.content_sha256
                 """,
                 (
                     claim.job_id,
@@ -551,11 +580,15 @@ class PostgresStateStore(PostgresCdcMixin):
         fetch_result: FetchResult | None = None,
         validation: ValidationResult | None = None,
     ) -> None:
+        with self._connect() as connection:
+            retry_base = connection.execute(
+                "SELECT fetch_retry_base FROM crawl_state.jobs WHERE id=%s", (claim.job_id,)
+            ).fetchone()["fetch_retry_base"]
         if attempt_status == "blocked":
             job_status = "blocked"
         elif (
             not retryable
-            or claim.attempt_number >= max_attempts
+            or claim.attempt_number - retry_base >= max_attempts
         ):
             job_status = "permanent_error"
             next_retry_at = None
@@ -739,7 +772,26 @@ class PostgresStateStore(PostgresCdcMixin):
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, 'valid'
                 )
-                ON CONFLICT (job_id) DO NOTHING
+                ON CONFLICT (job_id) DO UPDATE SET
+                    storage_provider=EXCLUDED.storage_provider,
+                    bucket_name=EXCLUDED.bucket_name,
+                    object_key=EXCLUDED.object_key,
+                    object_version=EXCLUDED.object_version,
+                    requested_url=EXCLUDED.requested_url,
+                    final_url=EXCLUDED.final_url,
+                    http_status=EXCLUDED.http_status,
+                    content_type=EXCLUDED.content_type,
+                    content_length_bytes=EXCLUDED.content_length_bytes,
+                    content_sha256=EXCLUDED.content_sha256,
+                    fetched_at=EXCLUDED.fetched_at,
+                    stored_at=EXCLUDED.stored_at,
+                    validation_version=EXCLUDED.validation_version,
+                    validation_report=EXCLUDED.validation_report,
+                    last_integrity_check_at=EXCLUDED.last_integrity_check_at,
+                    integrity_status=EXCLUDED.integrity_status,
+                    purged_at=NULL, refreshed_at=CURRENT_TIMESTAMP
+                WHERE crawl_state.raw_objects.purged_at IS NOT NULL
+                   OR crawl_state.raw_objects.content_sha256 <> EXCLUDED.content_sha256
                 """,
                 (
                     pending.job_id,
@@ -890,7 +942,7 @@ class PostgresStateStore(PostgresCdcMixin):
                     r.content_sha256
                 FROM crawl_state.raw_objects AS r
                 JOIN crawl_state.jobs AS j ON j.id = r.job_id
-                WHERE j.source = %s
+                WHERE j.source = %s AND r.purged_at IS NULL
                 ORDER BY
                     r.last_integrity_check_at IS NOT NULL,
                     r.last_integrity_check_at,
@@ -1035,7 +1087,9 @@ class PostgresStateStore(PostgresCdcMixin):
                             THEN 1 ELSE 0
                         END) AS attempted_this_run
                     FROM crawl_state.parse_attempts
-                    WHERE parser_name = %s
+                    WHERE (SELECT refreshed_at IS NULL OR started_at >= refreshed_at
+                           FROM crawl_state.raw_objects WHERE id=raw_object_id)
+                      AND parser_name = %s
                       AND parser_version = %s
                     GROUP BY raw_object_id
                 ) AS p ON p.raw_object_id = r.id
@@ -1063,7 +1117,12 @@ class PostgresStateStore(PostgresCdcMixin):
                 connection.commit()
                 return None
 
-            attempt_number = int(row["attempt_count"]) + 1
+            attempt_number = connection.execute(
+                """SELECT COALESCE(MAX(attempt_number),0)+1 AS next_attempt
+                   FROM crawl_state.parse_attempts
+                   WHERE raw_object_id=%s AND parser_name=%s AND parser_version=%s""",
+                (row["raw_object_id"], parser_name, parser_version),
+            ).fetchone()["next_attempt"]
             cursor = connection.execute(
                 """
                 INSERT INTO crawl_state.parse_attempts (
@@ -1307,6 +1366,7 @@ class PostgresStateStore(PostgresCdcMixin):
                       ON p.raw_object_id = r.id
                      AND p.parser_name = %s
                      AND p.parser_version = %s
+                     AND (r.refreshed_at IS NULL OR p.started_at >= r.refreshed_at)
                     WHERE j.source = %s
                       AND j.raw_status = 'raw_ready'
                       AND r.integrity_status = 'valid'

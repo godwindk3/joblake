@@ -73,7 +73,7 @@ services:
     command:
       - bash
       - -c
-      - airflow db migrate && airflow pools set joblake_serial 1 'One JobLake task at a time'
+      - airflow db migrate && airflow pools set joblake_serial 3 'Up to three JobLake tasks across sources; cleanup reserves all slots'
     restart: "no"
 
   airflow-api-server:

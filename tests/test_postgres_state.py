@@ -59,6 +59,8 @@ class PostgresStateTests(unittest.TestCase):
                 core_migration.upgrade()
                 cdc_migration = module_at("cdc_migration", ROOT / "migrations/versions/0003_url_cdc.py")
                 cdc_migration.upgrade()
+                module_at("location_migration", ROOT / "migrations/versions/0004_location_cities.py").upgrade()
+                module_at("cleanup_migration", ROOT / "migrations/versions/0005_raw_cleanup.py").upgrade()
         finally:
             engine.dispose()
 

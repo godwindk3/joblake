@@ -306,6 +306,12 @@ class IngestionPipeline:
         detail_config = self.config["detail"]
         state_config = self.config["state"]
         max_jobs = detail_config.get("max_jobs_per_run")
+        error_limit = detail_config.get("max_consecutive_errors")
+        if error_limit is not None:
+            error_limit = int(error_limit)
+            if error_limit < 1:
+                raise ValueError("detail.max_consecutive_errors must be at least 1")
+        consecutive_errors = 0
         max_attempts = int(
             state_config.get(
                 "detail_max_attempts",
@@ -345,12 +351,24 @@ class IngestionPipeline:
                     claim.record.url,
                 )
 
+                errors_before = self._detail_error_count
                 if not self._crawl_detail(
                     fetcher=fetcher,
                     claim=claim,
                     max_attempts=max_attempts,
                 ):
                     return "blocked"
+
+                consecutive_errors = (
+                    consecutive_errors + 1
+                    if self._detail_error_count > errors_before else 0
+                )
+                if error_limit is not None and consecutive_errors >= error_limit:
+                    LOGGER.error(
+                        "Stopping detail after %s consecutive errors; remaining URLs stay queued",
+                        consecutive_errors,
+                    )
+                    return "failed"
 
                 self._sleep(detail_config["delay"])
 
