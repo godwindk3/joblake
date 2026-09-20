@@ -73,16 +73,17 @@ schedule, pool và Airflow retries không được điều khiển bởi YAML cr
 
 ## Supabase
 
-Giữ bốn lệnh `supabase-test`, `supabase-sync --dry-run`, `supabase-sync`,
-`supabase-verify` chạy tay như hiện tại. Sync mới xử lý tất cả source, không
-lọc ITviec; do đó chưa gắn vào cuối DAG ITviec.
+DAG `joblake_supabase_sync` chạy thủ công (`schedule=None`), mặc định paused.
+Unpause và bấm Trigger để đồng bộ trạng thái local hiện tại, không crawl lại.
+Giữ `dry_run=false` để ghi dữ liệu; chọn `true` để chỉ xem số hàng sẽ thêm/sửa/xóa.
+Luồng: `check_connection -> sync_active_jobs`; sync đối chiếu toàn bộ dữ liệu
+với snapshot ngay trong transaction trước commit. Không cần task verify riêng
+có thể đọc một snapshot local mới sau khi crawler chạy tiếp.
 
-Sau khi bốn DAG source ổn định, thêm một DAG sync chung:
-`supabase-test -> supabase-sync -> supabase-verify`. Dry run là bước kiểm tra
-thủ công trước lần dùng đầu, không cần chạy trước mỗi sync. Không đưa
-`supabase-migrate` vào lịch. Khi verify phải tránh parser chạy đồng thời;
-pool một slot cho từng task chưa đủ đảm bảo không có parse chen giữa sync và
-verify, nên cần phối hợp cả lượt chạy khi triển khai giai đoạn đó.
+Task sync giữ cả ba slot của pool `joblake_serial`; `max_active_runs=1`.
+Chỉ job active được xuất bản, expired/unknown bị loại; mỗi tin giữ một bản.
+Xem [hướng dẫn Supabase](../operations/supabase-cli.md) để biết trường được lưu,
+chính sách parse lỗi và cách kiểm tra. Không chạy legacy `supabase-migrate`.
 
 ## Kiểm tra trước khi sử dụng
 
@@ -95,4 +96,3 @@ docker compose -f orchestration/airflow/compose.yaml config --quiet
 `check_dag.py` kiểm tra import Airflow thật, dependency ba phase và watcher, pool,
 retry và strict flag. Cần chạy thêm một batch thực tế để xác nhận browser,
 network và quyền ghi state của môi trường Docker trên máy.
-

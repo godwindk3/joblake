@@ -22,6 +22,7 @@ Run commands from the repository root unless stated otherwise.
 ## operations
 
 - [airflow-sources.md](operations/airflow-sources.md)
+- [data-health.md](operations/data-health.md)
 - [diagnostics-and-storage.md](operations/diagnostics-and-storage.md)
 - [log-retention.md](operations/log-retention.md)
 - [postgres-state-migration.md](operations/postgres-state-migration.md)

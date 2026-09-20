@@ -1,5 +1,9 @@
 # Supabase migration test
 
+> Historical full-replica procedure. The current deployment uses compact
+> `serving.jobs` / `serving.sources`; see [active-job sync](supabase-cli.md).
+> Legacy migration refuses destinations with a `serving` schema.
+
 JobLake keeps local PostgreSQL as the processed-data authority. This procedure
 copies only the curated serving schemas (`ref` and `core`) to Supabase; it never
 copies MinIO raw HTML, crawler SQLite state, PostgreSQL roles, or Supabase-owned

@@ -19,9 +19,9 @@ with DAG(
     tags=["joblake", "jobsgo"],
     default_args={
         "retries": 2,
-        "retry_delay": timedelta(minutes=5),
-        "retry_exponential_backoff": True,
-        "max_retry_delay": timedelta(minutes=30),
+        "retry_delay": timedelta(minutes=1),
+        "retry_exponential_backoff": False,
+        "max_retry_delay": timedelta(minutes=1),
         "pool": "joblake_serial",
     },
 ) as dag:

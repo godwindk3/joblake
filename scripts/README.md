@@ -11,10 +11,10 @@ Run from the repository root after installing the project. Scripts retain their 
 | inspect_local_postgres.py | Read-only database inventory |
 | migrate_state_to_postgres.py | Offline state migration and verification |
 | reset_joblake_data.py | Destructive data reset |
-| migrate_to_supabase.py | Remote migration wrapper |
+| migrate_to_supabase.py | Legacy full replica migration (blocked on serving deployments) |
 | test_supabase_connection.py | Remote connectivity check |
-| verify_supabase_migration.py | Remote migration verification |
-| supabase_location_cities.sql | Location field rollout |
+| verify_supabase_migration.py | Active serving replica verification |
+| supabase_location_cities.sql | Legacy core replica location field rollout |
 | freeze_constraints.py | Snapshot installed runtime dependencies |
 
 Review tool options before write operations. Recovery scripts are not part of ordinary setup.

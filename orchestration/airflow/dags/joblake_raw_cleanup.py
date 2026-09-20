@@ -21,7 +21,7 @@ with DAG(
         'max_objects': Param(200, type='integer', minimum=1, maximum=10000),
         'max_mib': Param(250, type='integer', minimum=1, maximum=10240),
     },
-    default_args={'retries': 2, 'retry_delay': timedelta(minutes=5), 'pool': 'joblake_serial'},
+    default_args={'retries': 2, 'retry_delay': timedelta(minutes=1), 'pool': 'joblake_serial'},
 ) as dag:
     cleanup = BashOperator(
         task_id='cleanup_raw',

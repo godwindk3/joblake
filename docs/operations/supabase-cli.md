@@ -1,47 +1,110 @@
-# JobLake Supabase CLI
+# Supabase: compact active jobs
 
-Run from the repository root with the installed JobLake environment.
+Local PostgreSQL is authoritative. Supabase stores only `serving.sources` and
+`serving.jobs`, one row per active posting. Raw HTML, parse history and crawl
+state stay local. `core`/`ref` full replication is legacy and must not be used
+on this deployment.
+
+## Run manually in Airflow
+
+Open `joblake_supabase_sync`, unpause it, then Trigger. There is **no schedule**
+(`schedule=None`, `catchup=False`). Unpausing alone does not schedule a sync.
+
+- `dry_run=false` (default): apply inserts, changed rows and removals atomically.
+- `dry_run=true`: validate and display counts; never write serving rows.
+- Tasks: `check_connection -> sync_active_jobs`.
+- Sync verifies every staged publishable row and absence of inactive rows before
+  committing. Failed verification rolls back the entire transaction.
+- Sync reserves all three slots of `joblake_serial`; only one sync run is active.
+- This DAG does not crawl. Trigger source DAGs first if fresh listing state is needed.
+
+## Stored fields
+
+`serving.sources`: `id`, `code`, `display_name`.
+
+`serving.jobs`:
+
+| Purpose | Columns |
+| --- | --- |
+| Identity and source link | `id`, `source_id`, `canonical_url` |
+| Listing | `title`, `employer_name_raw` |
+| Detail | `description_text`, `requirements_text`, `benefits_text` |
+| Filters | `categories_raw`, `skills_raw`, `location_cities` |
+| Conditions | `salary_raw`, `employment_type_raw`, `experience_raw` |
+| Dates | `posted_at`, `expires_at`, `last_seen_at`, `updated_at` |
+
+ID is the local `core.source_job_postings.id`, not a parse-result ID.
+Only one benefit representation is stored: nonblank benefits text, falling back
+to joined `benefit_items`. Full detail text is retained without truncation.
+No raw payload, parser metadata, duplicate benefit array, detailed raw locations,
+historical versions or crawler events are copied. Sources use numeric foreign keys.
+Jobs have only the primary key, source index, and posted-date/id ordering index;
+no speculative full-text or GIN indexes. Unchanged rows are not rewritten.
+`updated_at` records an actual serving-row change; `last_seen_at` comes from crawl
+state. Salary/experience remain display strings, not numeric range filters.
+
+## State and failure behavior
+
+Active means present in the last qualifying listing scope, not independently
+verified employer availability. `expires_at` is displayed but is not an extra
+expiry rule. Only complete successful discovery updates CDC state; skipped or
+blocked discovery does not infer expiry. Sync exports the last committed state
+even after a failed scan, so previously missed removals can catch up.
+
+- `active` plus a current accepted/partial parse and nonblank title: publish.
+- `expired` or `unknown`: remove from serving, retaining local history.
+- Active without a usable current parse: retain any previously published content
+  and refresh last-seen time; a never-published job waits for valid content.
+- Reappeared jobs are reinserted when active with usable current content.
+- Scope changes can reset previous jobs to unknown, removing them on the next sync.
+- A posting missing its crawl-state mapping, inconsistent source identity, or
+  active state without a valid CDC baseline aborts the whole sync before changes.
+- An empty local source catalog is rejected. A valid catalog with no active jobs
+  legitimately removes all serving jobs. Remote jobs missing from the complete
+  local posting snapshot are removed too. Do not point sync at a partial database.
+
+All sources are processed; `--config` only affects ingestion. No timestamp
+checkpoint is required. A repeatable-read local snapshot is streamed with COPY
+into temporary remote tables. A remote advisory lock is acquired before the
+local snapshot, preventing older concurrent exports from committing last.
+Temporary tables disappear on commit/rollback. Dry-run/verify still acquire
+locks and write temporary staging data, but do not modify serving rows.
+
+## CLI and configuration
 
 ```powershell
 python -m joblake.main --phase supabase-test
-python -m joblake.main --phase supabase-migrate --preflight-only
-python -m joblake.main --phase supabase-migrate
 python -m joblake.main --phase supabase-sync --dry-run
 python -m joblake.main --phase supabase-sync
 python -m joblake.main --phase supabase-verify
 ```
 
-Use migrate once on a target without `core` or `ref`. For the already migrated
-project, use sync directly. Sync updates/inserts all three application tables
-and preserves their local IDs. It requires the existing schema and the original
-replica's ID mapping; conflicting IDs or natural keys fail and roll back the
-entire transaction. No row deletion, retention, or serving-schema redesign is
-included. The local parser remains the authority for all synced fields.
+For a **new empty deployment only**, use `--phase supabase-setup`. It refuses an
+existing `serving` schema and never deletes data. Legacy `supabase-migrate`
+refuses a serving deployment. `scripts/verify_supabase_migration.py` now verifies
+serving; the old `joblake.supabase_verify` module is retained for historical audits.
 
-All sources are synced together. `--config configs/topdev.yaml` remains accepted
-but only configures ingestion phases, not Supabase phases.
+The root `.env` supplies `SUPABASE_DATABASE_URL` (direct/session-pooler PostgreSQL,
+TLS required) and local PostgreSQL settings. Existing environment values win.
+`LOCAL_DATABASE_URL` otherwise takes precedence over individual `POSTGRES_*`
+fields. Inside Docker only, its loopback hostname is replaced by a configured
+non-loopback `POSTGRES_HOST` (normally `host.docker.internal`); port, database and
+credentials are preserved. Explicit non-loopback URLs are not rewritten.
 
-The CLI loads the repository `.env`. Existing process environment takes priority.
-Set `SUPABASE_DATABASE_URL` to the direct or session-pooler URI with
-`sslmode=require`. Local settings reuse `POSTGRES_HOST`, `POSTGRES_PORT`,
-`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`. An explicit
-`LOCAL_DATABASE_URL` overrides those values: remove an obsolete URL to avoid
-connecting to the wrong port. No credentials belong in Git.
+RLS is enabled on both tables, with no public grants/policies. SQL Editor and
+the database sync account can access them. Browser/Data API access requires a
+separate deliberate schema exposure and read-policy configuration; no client
+write permissions are granted. Security Advisor's informational
+`rls_enabled_no_policy` is expected for these currently private tables.
 
-Sync reads a consistent local snapshot in batches of 200 rows. It uses one
-remote transaction and locks the three destination tables against concurrent
-writes, while ordinary SELECT queries remain possible. The remote should be
-dedicated to this local data source. Dry run executes validation/upserts but
-rolls back row changes; it still obtains locks and is not a read-only query.
-Identity sequences are advanced transactionally only on a real sync.
+## Verification
 
-This deliberately scans all rows on every run; no cursor/checkpoint can skip a
-late local update. Pause parsing during verification to avoid differences from
-newly committed local data. Verification retains the original count, ID-range,
-constraint/index, null, sequence and sample checks; it is not an exhaustive
-byte-for-byte audit. Remote-only rows are never deleted and can cause verify to
-report a difference.
+```powershell
+$env:JOBLAKE_TEST_SERVING = '1'
+python -m unittest discover -s tests -p 'test_supabase*.py' -v
+docker compose -f orchestration/airflow/compose.yaml exec -T airflow-scheduler python /opt/airflow/check_dag.py
+```
 
-Old scripts remain compatibility entry points. The package implementation is
-under `src/joblake/supabase_*.py`. Migration needs pg_dump/pg_restore; sync,
-connection testing and verification use Psycopg directly.
+SQL integration tests create and drop a uniquely named local test database;
+they never use Supabase for test writes. The live Airflow dry-run validates the
+real credentials and source mapping without publishing rows.
