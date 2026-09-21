@@ -1,6 +1,7 @@
 """Create an empty serving schema. Never reset data as part of a sync."""
 import logging
 import os
+from importlib.resources import files
 
 import psycopg
 from dotenv import load_dotenv
@@ -24,6 +25,7 @@ def main():
             # Private until an application-specific read policy is deliberately configured.
             c.execute('REVOKE ALL ON SCHEMA serving FROM anon, authenticated')
             c.execute('REVOKE ALL ON ALL TABLES IN SCHEMA serving FROM anon, authenticated')
+            c.execute(files('joblake').joinpath('sql/serving_search_v1.sql').read_text(encoding='utf-8'))
         LOGGER.info('SUCCESS: empty serving.sources and serving.jobs created with RLS')
         return 0
     except psycopg.Error as exc:

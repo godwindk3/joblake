@@ -5,6 +5,7 @@ Opt in with JOBLAKE_TEST_SERVING=1. Requires local CREATEDB permission.
 import os
 import unittest
 import uuid
+from importlib.resources import files
 from unittest.mock import patch
 
 import psycopg
@@ -51,6 +52,7 @@ class ServingTests(unittest.TestCase):
         with psycopg.connect(cls.url) as c:
             c.execute(LOCAL_DDL)
             c.execute(SERVING_DDL)
+            c.execute(files('joblake').joinpath('sql/serving_search_v1.sql').read_text(encoding='utf-8'))
 
     @classmethod
     def tearDownClass(cls):
@@ -99,6 +101,49 @@ class ServingTests(unittest.TestCase):
         self.assertEqual(self.execute('SELECT title,benefits_text FROM serving.jobs WHERE id=1'),
                          [('Kỹ sư phần mềm', 'Bảo hiểm\nThưởng')])
         self.assertEqual(sync(verify_only=True), 0)
+
+    def test_search_accents_filters_and_no_body_search(self):
+        self.assertEqual(sync(), 0)
+        self.execute("UPDATE serving.jobs SET location_cities=ARRAY['Hà Nội'] WHERE id=1")
+        self.assertEqual(self.execute("SELECT id FROM serving.search_jobs('ky su','example','Hà Nội')"), [(1,)])
+        self.assertEqual(self.execute("SELECT id FROM serving.search_jobs('kỹ sư','example','Hà Nội')"), [(1,)])
+        self.assertEqual(self.execute("SELECT id FROM serving.search_jobs('Nội dung')"), [])
+        self.assertEqual(self.execute("SELECT id FROM serving.search_jobs('ky su','other','Hà Nội')"), [])
+
+    def test_search_technology_names_are_distinct(self):
+        self.assertEqual(sync(), 0)
+        for query, alias in [('C++','cplusplus'), ('C#','csharp'), ('.NET','dotnet'), ('Node.js','nodejs')]:
+            with self.subTest(query=query):
+                self.execute('UPDATE serving.jobs SET title=%s WHERE id=1', (query+' Developer',))
+                self.execute("UPDATE serving.jobs SET title='C Developer' WHERE id=5")
+                self.assertEqual(self.execute('SELECT id FROM serving.search_jobs(%s)', (query,)), [(1,)])
+                self.assertEqual(self.execute('SELECT id FROM serving.search_jobs(%s)', (alias,)), [(1,)])
+
+    def test_search_rank_trigger_and_pagination(self):
+        self.assertEqual(sync(), 0)
+        self.execute("UPDATE serving.jobs SET title='Python Developer' WHERE id=1")
+        self.execute("UPDATE serving.jobs SET employer_name_raw='Python', title='Other role' WHERE id=5")
+        self.assertEqual(self.execute("SELECT id FROM serving.search_jobs('Python')"), [(1,), (5,)])
+        self.assertEqual(self.execute("SELECT id FROM serving.search_jobs('Python',NULL,NULL,1,1)"), [(5,)])
+        self.execute("UPDATE serving.jobs SET title='Java Developer' WHERE id=1")
+        self.assertEqual(self.execute("SELECT id FROM serving.search_jobs('Python')"), [(5,)])
+        self.assertEqual(self.execute("SELECT id FROM serving.search_jobs('Java')"), [(1,)])
+
+    def test_search_blank_punctuation_and_bounds(self):
+        self.assertEqual(sync(), 0)
+        self.assertEqual(len(self.execute("SELECT id FROM serving.search_jobs('')")), 2)
+        self.assertEqual(self.execute("SELECT id FROM serving.search_jobs('!!!')"), [])
+        for params in [('x',0,0), ('x',101,0), ('x',20,-1), ('x'*201,20,0)]:
+            with self.assertRaises(psycopg.errors.InvalidParameterValue):
+                self.execute('SELECT * FROM serving.search_jobs(%s,NULL,NULL,%s,%s)', params)
+
+    def test_staging_does_not_copy_search_column_or_indexes(self):
+        from joblake.supabase_sync import stage_snapshot
+        with psycopg.connect(self.url) as local, psycopg.connect(self.url) as remote:
+            stage_snapshot(local, remote)
+            columns = remote.execute("SELECT attname FROM pg_attribute WHERE attrelid='pg_temp.sync_jobs'::regclass AND attnum>0").fetchall()
+            self.assertNotIn(('search_vector',), columns)
+            self.assertEqual(remote.execute("SELECT count(*) FROM pg_index WHERE indrelid='pg_temp.sync_jobs'::regclass").fetchone()[0], 1)
 
     def test_expiry_unknown_and_reappearance_without_new_parse(self):
         self.assertEqual(sync(), 0)

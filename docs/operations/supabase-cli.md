@@ -38,8 +38,12 @@ Only one benefit representation is stored: nonblank benefits text, falling back
 to joined `benefit_items`. Full detail text is retained without truncation.
 No raw payload, parser metadata, duplicate benefit array, detailed raw locations,
 historical versions or crawler events are copied. Sources use numeric foreign keys.
-Jobs have only the primary key, source index, and posted-date/id ordering index;
-no speculative full-text or GIN indexes. Unchanged rows are not rewritten.
+Jobs have the primary key, source index, posted-date/id ordering index, and
+GIN indexes for search_vector and location_cities. Search v1 covers title/skills
+(weight A) and employer/categories (weight B), with simple/unaccent normalization.
+A database trigger maintains search_vector; it is not exported from local.
+Staging copies only the export columns and a primary key, not the GIN indexes.
+Unchanged rows are not rewritten.
 `updated_at` records an actual serving-row change; `last_seen_at` comes from crawl
 state. Salary/experience remain display strings, not numeric range filters.
 
@@ -92,10 +96,17 @@ non-loopback `POSTGRES_HOST` (normally `host.docker.internal`); port, database a
 credentials are preserved. Explicit non-loopback URLs are not rewritten.
 
 RLS is enabled on both tables, with no public grants/policies. SQL Editor and
-the database sync account can access them. Browser/Data API access requires a
-separate deliberate schema exposure and read-policy configuration; no client
-write permissions are granted. Security Advisor's informational
+the database sync account can access them. Search v1 grants service_role read
+access and EXECUTE on serving.search_jobs for server-side integration only;
+anon/authenticated remain unprivileged. Data API schema exposure must be checked
+separately. No client write permissions are granted. Security Advisor's informational
 `rls_enabled_no_policy` is expected for these currently private tables.
+
+See [web search handoff](../handoff/JOBLAKE_WEB_FTS_CONTEXT.md) for the RPC contract,
+normalization rules, index measurements and integration requirements. The remote
+migration is stored at `src/joblake/sql/serving_search_v1.sql` and has already been
+applied to the current Supabase project; do not rerun it there. New empty setup
+applies it automatically after creating the base serving schema.
 
 ## Verification
 

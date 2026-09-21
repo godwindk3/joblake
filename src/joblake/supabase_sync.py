@@ -146,7 +146,9 @@ def stage_snapshot(local, remote):
         id bigint PRIMARY KEY, source_id bigint NOT NULL, canonical_url text NOT NULL,
         listing_status text NOT NULL CHECK (listing_status IN ('active','expired','unknown')),
         last_seen_at timestamptz NOT NULL) ON COMMIT DROP""")
-    remote.execute('CREATE TEMP TABLE sync_jobs (LIKE serving.jobs INCLUDING ALL) ON COMMIT DROP')
+    # Copy only exported columns: no derived search vector, triggers or GIN indexes.
+    remote.execute(sql.SQL('CREATE TEMP TABLE sync_jobs ON COMMIT DROP AS SELECT {} FROM serving.jobs WITH NO DATA').format(identifiers(JOB_COLUMNS)))
+    remote.execute('ALTER TABLE sync_jobs ADD PRIMARY KEY (id)')
     sources = copy_query(local, remote, 'sync_sources', SOURCE_COLUMNS,
                          'SELECT id,code,display_name FROM ref.sources ORDER BY id')
     if not sources:
