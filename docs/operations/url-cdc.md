@@ -3,8 +3,10 @@
 CDC detects absence from the configured listing scope, not deletion of the detail
 page or a verified employer deadline. It runs after successful discovery and
 before detail. It never deletes HTML or parsed output, or changes raw retry state.
-It uses local PostgreSQL `crawl_state`; Supabase sync still includes only `core`
-and `ref`, so Supabase does not yet receive listing status.
+It uses local PostgreSQL `crawl_state`. Manual Supabase sync reads this state
+and reconciles a compact `serving.jobs` table: active jobs are published;
+expired/unknown jobs are removed remotely. Crawl state and events stay local.
+See [Supabase sync](supabase-cli.md).
 
 ## Enable and baseline
 

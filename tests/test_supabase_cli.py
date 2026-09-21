@@ -25,6 +25,23 @@ class SupabaseCliTests(unittest.TestCase):
         self.assertEqual(result.remote_count, 627)
         self.assertEqual(result.remote_min_id, 388)
 
+    def test_docker_loopback_url_uses_host_override_preserving_credentials(self):
+        with patch.dict(os.environ, {
+            'LOCAL_DATABASE_URL': "host=localhost port=5433 dbname=joblake user=test password='a @:#'",
+            'POSTGRES_HOST': 'host.docker.internal',
+        }, clear=True), patch('joblake.supabase_sync.Path.exists', return_value=True):
+            configure()
+            settings = conninfo_to_dict(os.environ['LOCAL_DATABASE_URL'])
+            self.assertEqual(settings['host'], 'host.docker.internal')
+            self.assertEqual(settings['port'], '5433')
+            self.assertEqual(settings['password'], 'a @:#')
+
+    def test_docker_does_not_rewrite_explicit_non_loopback_database(self):
+        original = 'host=database.example dbname=custom'
+        with patch.dict(os.environ, {'LOCAL_DATABASE_URL': original, 'POSTGRES_HOST': 'host.docker.internal'}, clear=True), patch('joblake.supabase_sync.Path.exists', return_value=True):
+            configure()
+            self.assertEqual(os.environ['LOCAL_DATABASE_URL'], original)
+
     def test_cli_routes_sync_without_ingestion(self):
         with patch('sys.argv', ['joblake', '--phase', 'supabase-sync', '--dry-run']), patch.object(cli, 'load_dotenv'), patch('joblake.supabase_sync.configure'), patch('joblake.supabase_sync.sync', return_value=0) as command:
             with self.assertRaises(SystemExit) as outcome:
@@ -32,19 +49,19 @@ class SupabaseCliTests(unittest.TestCase):
         self.assertEqual(outcome.exception.code, 0)
         command.assert_called_once_with(dry_run=True)
 
-    def test_sync_collision_aborts_transaction(self):
-        local, remote = MagicMock(), MagicMock()
-        local.__enter__.return_value = local
+    def test_sync_lock_conflict_aborts_transaction(self):
+        remote = MagicMock()
         remote.__enter__.return_value = remote
-        reader = local.cursor.return_value.__enter__.return_value
-        reader.fetchmany.return_value = [(1, 'topdev')]
-        reader.description = [MagicMock(), MagicMock()]
-        reader.description[0].name = 'id'
-        reader.description[1].name = 'code'
-        remote.execute.return_value.fetchone.return_value = ('other-source',)
-        with patch.dict(os.environ, {'LOCAL_DATABASE_URL': 'dbname=local', 'SUPABASE_DATABASE_URL': 'dbname=remote'}), patch('joblake.supabase_sync.psycopg.connect', side_effect=[local, remote]):
+        remote.execute.return_value.fetchone.return_value = (False,)
+        with patch.dict(os.environ, {'LOCAL_DATABASE_URL': 'dbname=local', 'SUPABASE_DATABASE_URL': 'dbname=remote'}), patch('joblake.supabase_sync.psycopg.connect', return_value=remote):
             self.assertEqual(sync(), 1)
         self.assertIs(remote.__exit__.call_args.args[0], ValueError)
+
+    def test_cli_verify_routes_to_active_serving_verifier(self):
+        with patch('sys.argv', ['joblake', '--phase', 'supabase-verify']), patch.object(cli, 'load_dotenv'), patch('joblake.supabase_sync.configure'), patch('joblake.supabase_sync.sync', return_value=0) as command:
+            with self.assertRaises(SystemExit):
+                cli.main()
+        command.assert_called_once_with(verify_only=True)
 
 
 if __name__ == '__main__':

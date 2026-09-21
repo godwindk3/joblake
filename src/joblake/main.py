@@ -29,7 +29,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--phase",
-        choices=("full", "discovery", "detail", "parse", "supabase-test", "supabase-migrate", "supabase-sync", "supabase-verify"),
+        choices=("full", "discovery", "detail", "parse", "supabase-test", "supabase-setup", "supabase-migrate", "supabase-sync", "supabase-verify"),
         default="full",
         help=(
             "Run discovery plus detail, discovery only, "
@@ -39,7 +39,7 @@ def main() -> None:
     )
 
     parser.add_argument("--preflight-only", action="store_true", help="Check migration without restoring")
-    parser.add_argument("--dry-run", action="store_true", help="Validate sync and roll back row changes")
+    parser.add_argument("--dry-run", action="store_true", help="Stage and report changes without writing serving rows")
     parser.add_argument(
         "--strict", action="store_true",
         help=(
@@ -71,7 +71,10 @@ def main() -> None:
             from joblake.supabase_migrate import main as command
             raise SystemExit(command(["--preflight-only"] if args.preflight_only else []))
         if args.phase == "supabase-verify":
-            from joblake.supabase_verify import main as command
+            from joblake.supabase_sync import sync
+            raise SystemExit(sync(verify_only=True))
+        if args.phase == "supabase-setup":
+            from joblake.supabase_serving_setup import main as command
             raise SystemExit(command())
         from joblake.supabase_sync import sync
         raise SystemExit(sync(dry_run=args.dry_run))

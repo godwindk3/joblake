@@ -61,13 +61,14 @@ def assert_empty_destination_schemas(database_url: str, schemas: tuple[str, ...]
                 WHERE schema_name = ANY(%s)
                 ORDER BY schema_name
                 """,
-                (list(schemas),),
+                (list(schemas) + ['serving'],),
             )
             existing = [row[0] for row in cursor.fetchall()]
     if existing:
         joined = ", ".join(existing)
         raise RuntimeError(
             f"Refusing to restore because destination schema(s) already exist: {joined}. "
+            "For a serving deployment, use supabase-sync instead of legacy migration. "
             "Use a newly created Supabase project or clean only these schemas manually "
             "after verifying they contain no required data."
         )
