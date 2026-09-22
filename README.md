@@ -2,6 +2,14 @@
 
 Collect job listings from ITviec, TopCV, TopDev, VietnamWorks, Devwork, CareerViet, Vieclam24h, CareerLink and JobsGO. Raw HTML lives in MinIO; crawl state and parsed records live in PostgreSQL.
 
+## Live demo
+
+**[Explore JobLake — joblake-web.vercel.app](https://joblake-web.vercel.app)**
+
+The public job-search website uses data collected and processed by the JobLake pipeline. Search listings, filter by source and province/city, view job details, and explore job statistics.
+
+[Try searching for `data enginee`](https://joblake-web.vercel.app/?q=data+enginee): the last word supports prefix matching from three normalized characters. The website source is maintained in a separate private repository.
+
 ## Start here
 
 Follow [local setup](docs/setup/local.md), then run from the repository root:

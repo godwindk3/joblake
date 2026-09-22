@@ -1,0 +1,27 @@
+{
+  "passed": [
+    "data eng",
+    "data enginee",
+    "data engineer",
+    "enginee",
+    "data en",
+    "dat enginee",
+    "\"data engineer\"",
+    "\"data enginee\"",
+    "data OR enginee",
+    "data or enginee",
+    "data -engineer",
+    "data -(enginee)",
+    "\"full-stack\" dev",
+    "kỹ thuậ",
+    "C++",
+    "C#",
+    ".NET",
+    "Node.js",
+    "empty, punctuation, special characters, bounds",
+    "stable pagination without duplicates",
+    "source and city filters",
+    "reader has no writes; SECURITY INVOKER"
+  ],
+  "pagination_rows": 162
+}
