@@ -27,6 +27,7 @@ coverage.xml
 /data/
 /output/
 /tmp/
+/supabase/.temp/
 *.log
 *.dump
 /orchestration/airflow/logs/

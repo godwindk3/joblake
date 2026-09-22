@@ -53,6 +53,7 @@ class ServingTests(unittest.TestCase):
             c.execute(LOCAL_DDL)
             c.execute(SERVING_DDL)
             c.execute(files('joblake').joinpath('sql/serving_search_v1.sql').read_text(encoding='utf-8'))
+            c.execute(files('joblake').joinpath('sql/serving_search_prefix.sql').read_text(encoding='utf-8'))
 
     @classmethod
     def tearDownClass(cls):
@@ -136,6 +137,98 @@ class ServingTests(unittest.TestCase):
         for params in [('x',0,0), ('x',101,0), ('x',20,-1), ('x'*201,20,0)]:
             with self.assertRaises(psycopg.errors.InvalidParameterValue):
                 self.execute('SELECT * FROM serving.search_jobs(%s,NULL,NULL,%s,%s)', params)
+
+    def prefix_fixture(self):
+        self.execute("INSERT INTO serving.sources VALUES (1,'example','Example'),(2,'other','Other')")
+        rows = [
+            (101, 1, 'Data Engineer', None, '2026-09-20'),
+            (102, 1, 'Data Engineering', None, '2026-09-19'),
+            (103, 2, 'Database Engineer', None, None),
+            (104, 1, 'Other role', 'Data Engineer', '2026-09-21'),
+            (105, 2, 'Data Engineer', None, '2026-09-20'),
+            (106, 1, 'Full-stack Developer', None, None),
+            (107, 1, 'Data Engineer', None, None),
+        ]
+        for job_id, source, title, employer, posted in rows:
+            self.execute('''INSERT INTO serving.jobs
+                (id,source_id,canonical_url,title,employer_name_raw,categories_raw,
+                 skills_raw,location_cities,posted_at,last_seen_at)
+                VALUES (%s,%s,%s,%s,%s,'{}','{}',ARRAY['Hà Nội'],%s,'2026-09-20')''',
+                (job_id, source, f'https://example.test/{job_id}', title, employer, posted))
+
+    def test_prefix_fixture_and_stable_pages(self):
+        self.prefix_fixture()
+        expected = [105, 101, 102, 107, 104]
+        for query in ['data eng', 'data enginee', 'data engineer', 'data eng   ', 'data eng\t\n']:
+            with self.subTest(query=query):
+                rows = self.execute('SELECT id,score FROM serving.search_jobs(%s)', (query,))
+                self.assertEqual([r[0] for r in rows], expected)
+                self.assertTrue(all(r[1] > 0 for r in rows))
+        self.assertEqual({r[0] for r in self.execute("SELECT id FROM serving.search_jobs('enginee')")},
+                         {101, 102, 103, 104, 105, 107})
+        for query in ['data en', 'data e', 'dat enginee', 'ngineer']:
+            self.assertEqual(self.execute('SELECT id FROM serving.search_jobs(%s)', (query,)), [])
+        self.assertEqual(self.execute("SELECT id FROM serving.search_jobs('data eng','other','Hà Nội')"), [(105,)])
+        self.assertEqual(self.execute("SELECT id FROM serving.search_jobs('data eng',NULL,'Đà Nẵng')"), [])
+        pages = [self.execute("SELECT id FROM serving.search_jobs('data eng',NULL,NULL,2,%s)", (n,))
+                 for n in [0, 2, 4, 6]]
+        self.assertEqual([r[0] for page in pages for r in page], expected)
+        for query in ['full-stack dev', 'full-sta']:
+            self.assertEqual(self.execute('SELECT id FROM serving.search_jobs(%s)', (query,)), [(106,)])
+
+    def test_prefix_syntax_matches_legacy(self):
+        self.prefix_fixture()
+        queries = ['"data engineer"', '"data enginee"', 'data OR enginee', 'data or enginee',
+                   'data -enginee', 'data -engineer', 'data -(enginee)', 'data OR',
+                   '"full-stack" dev', '"', '-data eng', 'data OR -enginee']
+        for query in queries:
+            with self.subTest(query=query):
+                expected = self.execute('''SELECT j.id,ts_rank(j.search_vector,q) AS score
+                    FROM serving.jobs j,
+                    websearch_to_tsquery('pg_catalog.simple',serving.normalize_search(%s)) q
+                    WHERE j.search_vector @@ q
+                    ORDER BY score DESC,j.posted_at DESC NULLS LAST,j.id DESC''', (query,))
+                self.assertEqual(self.execute('SELECT id,score FROM serving.search_jobs(%s)', (query,)), expected)
+
+    def test_prefix_special_input_and_short_exact(self):
+        self.prefix_fixture()
+        self.execute("UPDATE serving.jobs SET title='EN kỹ thuật C++ C# .NET Node.js' WHERE id=106")
+        for query in ['en', 'ky thua', 'kỹ thuậ', 'C++', 'C#', '.NET', 'Node.js']:
+            self.assertEqual(self.execute('SELECT id FROM serving.search_jobs(%s)', (query,)), [(106,)])
+        for query in [None, '', '   ']:
+            self.assertEqual(len(self.execute('SELECT id FROM serving.search_jobs(%s)', (query,))), 7)
+        for query in ['!!!', "'", '\\', ':*&|<>', "data eng'; DROP TABLE serving.jobs; --", 'x' * 200]:
+            self.execute('SELECT * FROM serving.search_jobs(%s)', (query,))
+        self.assertEqual(self.execute('SELECT count(*) FROM serving.jobs'), [(7,)])
+        for query in ['x' * 201, ' ' * 201]:
+            with self.assertRaises(psycopg.errors.InvalidParameterValue):
+                self.execute('SELECT * FROM serving.search_jobs(%s)', (query,))
+
+    def test_prefix_upgrade_rollback_and_reader(self):
+        self.prefix_fixture()
+        # A uniquely named role avoids touching any real reader on the local cluster.
+        role = 'joblake_web_reader_test_' + uuid.uuid4().hex[:12]
+        with psycopg.connect(self.url) as c:
+            c.execute(sql.SQL('CREATE ROLE {} NOLOGIN').format(sql.Identifier(role)))
+            try:
+                c.execute(sql.SQL('GRANT USAGE ON SCHEMA serving,extensions TO {}').format(sql.Identifier(role)))
+                c.execute(sql.SQL('GRANT SELECT ON serving.jobs,serving.sources TO {}').format(sql.Identifier(role)))
+                c.execute(sql.SQL('GRANT EXECUTE ON FUNCTION serving.normalize_search(text), serving.search_jobs(text,text,text,integer,integer) TO {}').format(sql.Identifier(role)))
+                for table in ['jobs', 'sources']:
+                    c.execute(sql.SQL('CREATE POLICY fixture_read ON serving.{} FOR SELECT TO {} USING (true)').format(sql.Identifier(table), sql.Identifier(role)))
+                before = c.execute("SELECT proacl FROM pg_proc WHERE oid='serving.search_jobs(text,text,text,integer,integer)'::regprocedure").fetchone()
+                for filename in ['serving_search_prefix_rollback.sql', 'serving_search_prefix.sql', 'serving_search_prefix.sql']:
+                    c.execute(files('joblake').joinpath('sql/' + filename).read_text(encoding='utf-8'))
+                    self.assertEqual(c.execute("SELECT proacl FROM pg_proc WHERE oid='serving.search_jobs(text,text,text,integer,integer)'::regprocedure").fetchone(), before)
+                    c.execute(sql.SQL('SET LOCAL ROLE {}').format(sql.Identifier(role)))
+                    rows = c.execute("SELECT id FROM serving.search_jobs('data eng')").fetchall()
+                    self.assertEqual(len(rows), 0 if 'rollback' in filename else 5)
+                    for privilege in ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']:
+                        self.assertFalse(c.execute("SELECT has_table_privilege(current_user,'serving.jobs',%s)", (privilege,)).fetchone()[0])
+                    c.execute('RESET ROLE')
+                self.assertEqual(c.execute("SELECT prosecdef,proconfig FROM pg_proc WHERE oid='serving.search_jobs(text,text,text,integer,integer)'::regprocedure").fetchone(), (False, ['search_path=""']))
+            finally:
+                c.rollback()  # includes test role, grants and policies
 
     def test_staging_does_not_copy_search_column_or_indexes(self):
         from joblake.supabase_sync import stage_snapshot

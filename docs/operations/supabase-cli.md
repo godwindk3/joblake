@@ -106,7 +106,11 @@ See [web search handoff](../handoff/JOBLAKE_WEB_FTS_CONTEXT.md) for the RPC cont
 normalization rules, index measurements and integration requirements. The remote
 migration is stored at `src/joblake/sql/serving_search_v1.sql` and has already been
 applied to the current Supabase project; do not rerun it there. New empty setup
-applies it automatically after creating the base serving schema.
+applies it automatically after creating the base serving schema, then applies
+`src/joblake/sql/serving_search_prefix.sql`. Existing deployments apply only the
+function-only prefix migration. Supabase migration `20260922011629_serving_search_prefix`
+was applied on 2026-09-22; no sync/backfill is required. See the linked handoff for
+prefix rules, rollback and measured results.
 
 ## Verification
 
