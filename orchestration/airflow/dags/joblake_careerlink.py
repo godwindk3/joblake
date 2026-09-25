@@ -29,6 +29,8 @@ with DAG(
     for phase in ("discovery", "detail", "parse"):
         tasks.append(BashOperator(
             task_id=phase,
+            # Detail already retries in the fetcher and durable state queue.
+            retries=0 if phase == "detail" else 2,
             trigger_rule="all_success" if phase == "discovery" else "all_done",
             cwd="/opt/joblake",
             bash_command=(

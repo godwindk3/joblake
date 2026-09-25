@@ -44,6 +44,9 @@ discovery:
     enabled: true
     base_url: https://www.careerlink.vn/viec-lam/cntt-phan-mem/19
 detail:
+  diagnostics_dir: data/state/diagnostics/careerlink/detail
+  diagnostics_retention_days: 7
+  diagnostics_max_captures: 30
   transport: cloakbrowser
   headless: false
   timeout_seconds: 60
@@ -60,7 +63,7 @@ detail:
     min: 1.5
     max: 4
   retry:
-    max_attempts: 3
+    max_attempts: 2
     base_delay_seconds: 90
     max_delay_seconds: 180
   validation:
@@ -72,7 +75,7 @@ detail:
     - www.careerlink.vn
     required_path_prefixes:
     - /tim-viec-lam/
-  max_jobs_per_run: null
+  max_jobs_per_run: 30
   # Release the worker instead of exhausting the queue during a site-wide failure.
   max_consecutive_errors: 3
   delay:
@@ -95,6 +98,7 @@ storage:
   prefix: raw
   store_discovery: false
 state:
+  source_lock_wait_seconds: 60
   provider: postgres
   database_path: data/state/joblake.db
   detail_max_attempts: 3
