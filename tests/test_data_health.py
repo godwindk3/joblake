@@ -3,12 +3,37 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-from joblake.data_health import QUERIES, collect_report, render_markdown, save_report
+from joblake.data_health import QUERIES, collect_report, main, render_markdown, save_report
 
 
 class DataHealthTests(unittest.TestCase):
+    def test_main_ignores_shared_configs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'topcv.yaml').write_text('source: topcv\n', encoding='utf-8')
+            (root / 'enrichment.yaml').write_text('providers: []\n', encoding='utf-8')
+            (root / 'empty.yaml').write_text('', encoding='utf-8')
+            with patch('joblake.data_health.PostgresSettings'), \
+                 patch('joblake.data_health.psycopg.connect'), \
+                 patch('joblake.data_health.collect_report') as collect, \
+                 patch('joblake.data_health.save_report', return_value=[]), \
+                 patch('joblake.data_health.render_markdown', return_value=''), \
+                 patch('builtins.print'):
+                main(['--config-dir', directory])
+            self.assertEqual(collect.call_args.args[1], ['topcv'])
+
+    def test_main_rejects_missing_or_invalid_sources_before_connecting(self):
+        for content in ('providers: []\n', 'source: null\n', 'source: 123\n'):
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as directory:
+                (Path(directory) / 'config.yaml').write_text(content, encoding='utf-8')
+                with patch('joblake.data_health.psycopg.connect') as connect, \
+                     patch('sys.stderr'), self.assertRaises(SystemExit) as error:
+                    main(['--config-dir', directory])
+                self.assertEqual(error.exception.code, 2)
+                connect.assert_not_called()
+
     def connection(self, overrides=None):
         connection = MagicMock()
         at = datetime(2026, 9, 20, 0, tzinfo=timezone.utc)

@@ -21,6 +21,7 @@ Run commands from the repository root unless stated otherwise.
 
 ## operations
 
+- [enrichment.md](operations/enrichment.md)
 - [airflow-sources.md](operations/airflow-sources.md)
 - [data-health.md](operations/data-health.md)
 - [diagnostics-and-storage.md](operations/diagnostics-and-storage.md)

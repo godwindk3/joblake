@@ -16,7 +16,7 @@ JOB_COLUMNS = (
     'id', 'source_id', 'canonical_url', 'title', 'employer_name_raw',
     'description_text', 'requirements_text', 'benefits_text', 'categories_raw',
     'skills_raw', 'location_cities', 'salary_raw', 'employment_type_raw',
-    'experience_raw', 'posted_at', 'expires_at', 'last_seen_at',
+    'experience_raw', 'posted_at', 'expires_at', 'first_seen_at', 'last_seen_at',
 )
 SOURCE_COLUMNS = ('id', 'code', 'display_name')
 STATE_COLUMNS = ('id', 'source_id', 'canonical_url', 'listing_status', 'last_seen_at')
@@ -45,6 +45,7 @@ CREATE TABLE serving.jobs (
     experience_raw text,
     posted_at timestamptz,
     expires_at timestamptz,
+    first_seen_at timestamptz,
     last_seen_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -71,6 +72,7 @@ SELECT p.id, p.source_id, p.canonical_url, r.title, r.employer_name_raw,
                 NULLIF(array_to_string(r.benefit_items, E'\\n'), '')) AS benefits_text,
        r.categories_raw, r.skills_raw, r.location_cities, r.salary_raw,
        r.employment_type_raw, r.experience_raw, r.posted_at, r.expires_at,
+       p.first_seen_at,
        j.last_seen_at
 FROM core.source_job_postings p
 JOIN ref.sources s ON s.id=p.source_id
@@ -120,7 +122,7 @@ def copy_query(local, remote, table, columns, query):
     return count
 
 
-def stage_snapshot(local, remote):
+def stage_snapshot(local, remote, columns=JOB_COLUMNS, jobs_query=JOBS_QUERY):
     # Never let a broken join silently turn into mass deletion.
     invalid = local.execute("""
         SELECT count(*) FROM core.source_job_postings p
@@ -147,14 +149,14 @@ def stage_snapshot(local, remote):
         listing_status text NOT NULL CHECK (listing_status IN ('active','expired','unknown')),
         last_seen_at timestamptz NOT NULL) ON COMMIT DROP""")
     # Copy only exported columns: no derived search vector, triggers or GIN indexes.
-    remote.execute(sql.SQL('CREATE TEMP TABLE sync_jobs ON COMMIT DROP AS SELECT {} FROM serving.jobs WITH NO DATA').format(identifiers(JOB_COLUMNS)))
+    remote.execute(sql.SQL('CREATE TEMP TABLE sync_jobs ON COMMIT DROP AS SELECT {} FROM serving.jobs WITH NO DATA').format(identifiers(columns)))
     remote.execute('ALTER TABLE sync_jobs ADD PRIMARY KEY (id)')
     sources = copy_query(local, remote, 'sync_sources', SOURCE_COLUMNS,
                          'SELECT id,code,display_name FROM ref.sources ORDER BY id')
     if not sources:
         raise ValueError('Local source catalog is empty; refusing reconciliation')
     copy_query(local, remote, 'sync_state', STATE_COLUMNS, STATE_QUERY)
-    copy_query(local, remote, 'sync_jobs', JOB_COLUMNS, JOBS_QUERY)
+    copy_query(local, remote, 'sync_jobs', columns, jobs_query)
     for table in ('sync_sources', 'sync_state', 'sync_jobs'):
         remote.execute(sql.SQL('ANALYZE {}').format(sql.Identifier(table)))
     if remote.execute("""SELECT EXISTS (
@@ -176,9 +178,9 @@ def different(columns):
         identifiers(columns, 't'), identifiers(columns, 's'))
 
 
-def changes(remote):
+def changes(remote, job_columns=JOB_COLUMNS):
     result = {}
-    for table, columns in (('sources', SOURCE_COLUMNS), ('jobs', JOB_COLUMNS)):
+    for table, columns in (('sources', SOURCE_COLUMNS), ('jobs', job_columns)):
         result[table] = remote.execute(sql.SQL("""
             SELECT count(*) FILTER (WHERE t.id IS NULL),
                    count(*) FILTER (WHERE t.id IS NOT NULL AND {})
@@ -215,9 +217,9 @@ def upsert(remote, table, columns):
                      identifiers(columns, 't'), identifiers(columns, 'excluded'))))
 
 
-def reconcile(remote):
+def reconcile(remote, job_columns=JOB_COLUMNS):
     upsert(remote, 'sources', SOURCE_COLUMNS)
-    upsert(remote, 'jobs', JOB_COLUMNS)
+    upsert(remote, 'jobs', job_columns)
     # Missing parse content is not evidence of expiry. Preserve the last good content.
     remote.execute("""
         UPDATE serving.jobs t SET last_seen_at=s.last_seen_at, updated_at=CURRENT_TIMESTAMP
@@ -229,11 +231,11 @@ def reconcile(remote):
         DELETE FROM serving.jobs t WHERE NOT EXISTS (
             SELECT 1 FROM sync_state s WHERE s.id=t.id AND s.listing_status='active')
     """)
-    verify_staged(remote)
+    verify_staged(remote, job_columns)
 
 
-def verify_staged(remote):
-    remaining = changes(remote)
+def verify_staged(remote, job_columns=JOB_COLUMNS):
+    remaining = changes(remote, job_columns)
     if any(remaining[t] != (0, 0) for t in ('sources', 'jobs')) or any(
         remaining[t] for t in ('delete', 'refresh_retained')
     ):
@@ -258,7 +260,9 @@ def sync(*, dry_run=False, verify_only=False):
             with psycopg.connect(os.environ['LOCAL_DATABASE_URL'], connect_timeout=15) as local:
                 local.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
                 local.execute("SET LOCAL statement_timeout='120s'")
-                stage_snapshot(local, remote)
+                from joblake.enrichment.serving import projection
+                jobs_query, job_columns = projection(local, remote, JOBS_QUERY, JOB_COLUMNS)
+                stage_snapshot(local, remote, job_columns, jobs_query)
             for row in remote.execute("""
                 SELECT s.code, count(j.id) FILTER (WHERE j.listing_status='active'),
                        count(j.id) FILTER (WHERE j.listing_status='expired'),
@@ -267,15 +271,15 @@ def sync(*, dry_run=False, verify_only=False):
                 LEFT JOIN sync_jobs e ON e.id=j.id GROUP BY s.code ORDER BY s.code
             """):
                 LOGGER.info('Source %s: active=%s expired=%s unknown=%s publishable=%s', *row)
-            LOGGER.info('Serving changes: %s', changes(remote))
+            LOGGER.info('Serving changes: %s', changes(remote, job_columns))
             if verify_only:
-                verify_staged(remote)
+                verify_staged(remote, job_columns)
                 remote.rollback()
             elif dry_run:
                 # Staging is temporary; never write production rows even transiently.
                 remote.rollback()
             else:
-                reconcile(remote)
+                reconcile(remote, job_columns)
         LOGGER.info('SUCCESS: %s', 'verification passed' if verify_only else
                     'dry run; no serving rows changed' if dry_run else 'serving sync committed')
         return 0

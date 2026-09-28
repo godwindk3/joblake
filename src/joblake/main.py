@@ -29,7 +29,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--phase",
-        choices=("full", "discovery", "detail", "parse", "supabase-test", "supabase-setup", "supabase-migrate", "supabase-sync", "supabase-verify"),
+        choices=("full", "discovery", "detail", "parse", "enrich", "supabase-test", "supabase-setup", "supabase-enrichment-setup", "supabase-migrate", "supabase-sync", "supabase-verify"),
         default="full",
         help=(
             "Run discovery plus detail, discovery only, "
@@ -39,6 +39,8 @@ def main() -> None:
     )
 
     parser.add_argument("--preflight-only", action="store_true", help="Check migration without restoring")
+    parser.add_argument('--enrichment-config', default='configs/enrichment.yaml')
+    parser.add_argument('--max-jobs', type=int, help='Maximum API attempts for the standalone enrich phase')
     parser.add_argument("--dry-run", action="store_true", help="Stage and report changes without writing serving rows")
     parser.add_argument(
         "--strict", action="store_true",
@@ -57,13 +59,21 @@ def main() -> None:
     configure_logging(args.log_level)
     if args.preflight_only and args.phase != "supabase-migrate":
         parser.error("--preflight-only requires supabase-migrate")
-    if args.dry_run and args.phase != "supabase-sync":
-        parser.error("--dry-run requires supabase-sync")
+    if args.dry_run and args.phase not in ("supabase-sync", "enrich"):
+        parser.error("--dry-run requires supabase-sync or enrich")
+    if args.max_jobs is not None and args.phase != 'enrich':
+        parser.error('--max-jobs requires enrich')
+    if args.phase == 'enrich':
+        from joblake.enrichment.service import run
+        raise SystemExit(run(args.enrichment_config, dry_run=args.dry_run, max_jobs=args.max_jobs))
     if args.strict and args.phase.startswith("supabase-"):
         parser.error("--strict applies only to ingestion phases")
     if args.phase.startswith("supabase-"):
         from joblake.supabase_sync import configure
         configure()
+        if args.phase == 'supabase-enrichment-setup':
+            from joblake.enrichment.serving import setup
+            raise SystemExit(setup())
         if args.phase == "supabase-test":
             from joblake.supabase_connection import main as command
             raise SystemExit(command())

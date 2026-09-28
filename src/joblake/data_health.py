@@ -195,9 +195,18 @@ def main(argv=None):
         parser.error('hours must be 1..8760 and samples must be 1..100')
     load_dotenv()
     configs = sorted(Path(args.config_dir).glob('*.yaml'))
-    if not configs:
+    sources = []
+    for path in configs:
+        config = yaml.safe_load(path.read_text(encoding='utf-8'))
+        # This directory also contains shared settings such as enrichment.yaml.
+        if not isinstance(config, dict) or 'source' not in config:
+            continue
+        source = config['source']
+        if not isinstance(source, str) or not source.strip():
+            parser.error(f'{path}: source must be a non-empty string')
+        sources.append(source)
+    if not sources:
         parser.error('config directory contains no source YAML files')
-    sources = [yaml.safe_load(path.read_text(encoding='utf-8'))['source'] for path in configs]
     settings = PostgresSettings.from_config()
     with psycopg.connect(**settings.connection_kwargs(), row_factory=dict_row,
                          options='-c default_transaction_read_only=on -c statement_timeout=60000') as connection:

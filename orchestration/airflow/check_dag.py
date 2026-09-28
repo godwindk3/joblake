@@ -71,3 +71,18 @@ for preview in (False, True):
     rendered = task.render_template(task.bash_command, {'params': {'dry_run': preview}})
     assert ('--dry-run' in rendered) is preview
 print('joblake_supabase_sync: manual active-job sync; no scheduled run')
+
+bag = DagBag(dag_folder='/opt/airflow/dags/joblake_enrichment.py')
+assert not bag.import_errors, bag.import_errors
+dag = bag.dags['joblake_enrichment']
+assert dag.schedule is None and not dag.catchup
+assert set(dag.task_ids) == {'enrich_jobs'}
+task = dag.get_task('enrich_jobs')
+assert not task.upstream_task_ids and not task.downstream_task_ids
+assert task.retries == 0 and task.pool_slots == 1
+assert dag.params['dry_run'] is True
+for preview in (False, True):
+    rendered = task.render_template(task.bash_command, {'params': {'dry_run': preview, 'max_jobs': 5}})
+    assert ('--dry-run' in rendered) is preview
+    assert '--max-jobs 5' in rendered
+print('joblake_enrichment: standalone manual DAG; logs via unbuffered CLI')
