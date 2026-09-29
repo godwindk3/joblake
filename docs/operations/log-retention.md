@@ -4,7 +4,10 @@
   per container. Recreate existing containers to apply it; do not restart a
   running crawl just to change logging. Volumes are not removed.
 - Task logs are retained for 14 days after a run ends, and files must also
-  be older than 14 days. Only the four source DAGs are in scope.
+  be older than 14 days. The helper covers nine source DAG IDs and the legacy
+  `joblake_log_cleanup` ID. There is currently no cleanup DAG file in the
+  repository, so this policy requires an explicit helper invocation or external
+  scheduling; Docker log rotation does not run this helper.
   Running/queued/unknown runs, symlinks and unrecognized files
   are skipped. Airflow state is rechecked before deleting each run's logs.
 - Do not manually clear/reopen an old run concurrently with cleanup. Pause

@@ -21,6 +21,7 @@ Run commands from the repository root unless stated otherwise.
 
 ## operations
 
+- [Project audit and completion checklist (2026-09-29)](operations/project-audit-2026-09-29.md)
 - [enrichment.md](operations/enrichment.md)
 - [airflow-sources.md](operations/airflow-sources.md)
 - [data-health.md](operations/data-health.md)

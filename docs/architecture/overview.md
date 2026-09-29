@@ -12,7 +12,7 @@ Source listings -> discovery -> PostgreSQL crawl_state
                                    PostgreSQL normalized records
 ```
 
-Airflow provides four manual source DAGs with a shared one-slot pool. Remote synchronization is a separate CLI operation. The full CLI phase includes discovery and detail only.
+Airflow provides nine manual source DAGs with the shared three-slot `joblake_serial` pool. Each source runs discovery, detail and parse sequentially. Remote synchronization has a separate manual DAG and CLI command; enrichment is also a separate optional manual DAG. Data health and raw cleanup have daily schedules. Raw cleanup defaults to dry-run. The full CLI phase includes discovery and detail only.
 
 ## Data model authority
 
