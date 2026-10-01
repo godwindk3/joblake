@@ -4,7 +4,10 @@
   per container. Recreate existing containers to apply it; do not restart a
   running crawl just to change logging. Volumes are not removed.
 - Task logs are retained for 14 days after a run ends, and files must also
-  be older than 14 days. Only the four source DAGs are in scope.
+  be older than 14 days. The helper covers nine source DAG IDs and the legacy
+  `joblake_log_cleanup` ID. There is currently no cleanup DAG file in the
+  repository, so this policy requires an explicit helper invocation or external
+  scheduling; Docker log rotation does not run this helper.
   Running/queued/unknown runs, symlinks and unrecognized files
   are skipped. Airflow state is rechecked before deleting each run's logs.
 - Do not manually clear/reopen an old run concurrently with cleanup. Pause
@@ -18,9 +21,11 @@
   docker compose -f orchestration/airflow/compose.yaml exec airflow-scheduler bash -c 'PYTHONPATH=/opt/joblake/src python -m joblake.log_cleanup --days 14'
   ```
 
-- Change the `--days 14` argument to adjust retention. The helper
+- Add `--apply` only after reviewing the preview. Change `--days 14` to adjust retention. The helper
   fails if it cannot read Airflow state; it does not guess which logs are safe.
-- This does not clean Airflow metadata, SQLite, raw, diagnostics, browser state,
+- The helper does not currently cover the sync, enrichment, data-health or
+  raw-cleanup DAGs. Health JSON/Markdown snapshots also have no automatic retention.
+- This does not clean Airflow metadata, legacy SQLite, raw, diagnostics, browser state,
   or PostgreSQL data. DAG-processor file logs and orphan logs whose metadata
   has been deleted are deliberately excluded and need separate review.
 - Docker rotation limits container stdout/stderr, not bind-mounted task logs.

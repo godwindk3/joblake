@@ -31,7 +31,8 @@ Open `joblake_supabase_sync`, unpause it, then Trigger. There is **no schedule**
 | Detail | `description_text`, `requirements_text`, `benefits_text` |
 | Filters | `categories_raw`, `skills_raw`, `location_cities` |
 | Conditions | `salary_raw`, `employment_type_raw`, `experience_raw` |
-| Dates | `posted_at`, `expires_at`, `last_seen_at`, `updated_at` |
+| Dates | `posted_at`, `first_seen_at`, `expires_at`, `last_seen_at`, `updated_at` |
+| Optional enrichment | `skills_required`, `skills_preferred`, `experience_min_years`, `experience_max_years`, `seniority_levels`, `work_mode`, `employment_type`, `enrichment_status`, `enriched_at` |
 
 ID is the local `core.source_job_postings.id`, not a parse-result ID.
 Only one benefit representation is stored: nonblank benefits text, falling back
@@ -45,7 +46,10 @@ A database trigger maintains search_vector; it is not exported from local.
 Staging copies only the export columns and a primary key, not the GIN indexes.
 Unchanged rows are not rewritten.
 `updated_at` records an actual serving-row change; `last_seen_at` comes from crawl
-state. Salary/experience remain display strings, not numeric range filters.
+state. `first_seen_at` comes from the local posting and is the fallback for v2
+date filtering/sorting. Raw salary/experience remain display strings; optional
+enrichment provides structured experience fields for v2 filters. Salary has no
+normalized numeric filter. See the [website contract](../development/serving-contract.md).
 
 ## State and failure behavior
 
@@ -95,28 +99,28 @@ fields. Inside Docker only, its loopback hostname is replaced by a configured
 non-loopback `POSTGRES_HOST` (normally `host.docker.internal`); port, database and
 credentials are preserved. Explicit non-loopback URLs are not rewritten.
 
-RLS is enabled on both tables, with no public grants/policies. SQL Editor and
-the database sync account can access them. Search v1 grants service_role read
-access and EXECUTE on serving.search_jobs for server-side integration only;
-anon/authenticated remain unprivileged. Data API schema exposure must be checked
-separately. No client write permissions are granted. Security Advisor's informational
-`rls_enabled_no_policy` is expected for these currently private tables.
+RLS is enabled on both tables. Bootstrap revokes access from `anon` and
+`authenticated`; v1 grants server-side service_role access. V2 is SECURITY INVOKER
+and grants EXECUTE to `joblake_web_reader` only if that role already exists.
+Application reader credentials, schema/table grants and SELECT policies require
+separate provisioning. Do not infer live role/policy state from bootstrap SQL.
+Data API exposure is separate from PostgreSQL grants/RLS; no client writes are
+granted by this setup.
 
-See [web search handoff](../handoff/JOBLAKE_WEB_FTS_CONTEXT.md) for the RPC contract,
-normalization rules, index measurements and integration requirements. The remote
-migration is stored at `src/joblake/sql/serving_search_v1.sql` and has already been
-applied to the current Supabase project; do not rerun it there. New empty setup
-applies it automatically after creating the base serving schema, then applies
-`src/joblake/sql/serving_search_prefix.sql`. Existing deployments apply only the
-function-only prefix migration. Supabase migration `20260922011629_serving_search_prefix`
-was applied on 2026-09-22; no sync/backfill is required. See the linked handoff for
-prefix rules, rollback and measured results.
+New empty setup applies the base schema, enrichment columns, v1 search, prefix
+matching and v2 in one transaction. Existing deployments use reviewed additive
+migrations in `supabase/migrations/`, which are not a full bootstrap history.
+Direct setup commands do not automatically register CLI migration history.
+See [website serving contract](../development/serving-contract.md) for exact
+arguments, fields, filter semantics and migration dependencies, and
+[enrichment setup](enrichment.md) for optional projection behavior.
 
 ## Verification
 
 ```powershell
 $env:JOBLAKE_TEST_SERVING = '1'
 python -m unittest discover -s tests -p 'test_supabase*.py' -v
+python -m unittest discover -s tests -p 'test_search_v2.py' -v
 docker compose -f orchestration/airflow/compose.yaml exec -T airflow-scheduler python /opt/airflow/check_dag.py
 ```
 

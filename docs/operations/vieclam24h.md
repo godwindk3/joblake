@@ -48,6 +48,8 @@ DAG `joblake_vieclam24h` mặc định paused, chạy thủ công, chung pool
 
 ## Kiểm tra 2026-09-19
 
+Đây là bằng chứng lịch sử; số trang/job và trạng thái runtime có thể đã thay đổi.
+
 - HTTP fetcher thật đã duyệt 14 trang. Số URL lấy ra khớp số ID job trong
   metadata trên từng trang.
 - Ba detail người dùng cung cấp và năm tin từ các trang 1/4/7/10/14:

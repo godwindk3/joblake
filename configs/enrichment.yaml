@@ -1,0 +1,33 @@
+# Only HTML fetched on/after this time is eligible. No historical backfill.
+eligible_from: '2026-09-26T00:00:00+07:00'
+max_jobs_per_run: 100
+max_run_seconds: 1200
+max_attempts: 3
+max_output_tokens: 2048
+request_timeout_seconds: 60
+providers:
+  - name: gemini
+    model: gemini-3.1-flash-lite
+    key_env: GEMINI_API_KEY
+    requests_per_minute: 12
+    tokens_per_minute: 200000
+    requests_per_day: 400
+    tokens_per_day: 2000000
+  - name: groq
+    model: openai/gpt-oss-120b
+    key_env: GROQ_API_KEY
+    requests_per_minute: 24
+    tokens_per_minute: 7000
+    requests_per_day: 800
+    tokens_per_day: 160000
+  - name: openrouter
+    enabled: false # Temporarily disabled: poor evidence validation on real jobs
+    model: nvidia/nemotron-3-super-120b-a12b:free
+    output_format: json_schema
+    reasoning_enabled: false
+    max_output_tokens: 4096
+    key_env: OPENROUTER_API_KEY
+    requests_per_minute: 10
+    tokens_per_minute: 16000
+    requests_per_day: 40
+    tokens_per_day: 200000

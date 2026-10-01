@@ -1,0 +1,11 @@
+# Initial operational budgets; tune using health snapshots and the crawl cadence.
+# null disables an individual threshold. Equality does not alert.
+defaults:
+  freshness_hours: 48
+  max_pending_fetch: 100
+  max_parse_backlog: 100
+  max_stuck_jobs: 0
+  max_parse_error_pct: 20
+  min_parse_jobs: 10
+# Per-source overrides merge with defaults, e.g. topcv: {max_parse_backlog: 50}.
+sources: {}

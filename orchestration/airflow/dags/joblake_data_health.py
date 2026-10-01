@@ -35,3 +35,15 @@ with DAG(
         ),
         do_xcom_push=False,
     )
+    check = BashOperator(
+        task_id='check_quality',
+        cwd='/opt/joblake',
+        retries=0,
+        execution_timeout=timedelta(minutes=2),
+        bash_command=(
+            'exec /opt/joblake/venv/bin/python -u -m joblake.health_policy '
+            '--max-report-age-hours 1'
+        ),
+        do_xcom_push=False,
+    )
+    report >> check

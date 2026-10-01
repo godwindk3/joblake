@@ -5,19 +5,19 @@ Mỗi website có một DAG riêng, cùng luồng `discovery -> detail -> parse`
 | DAG | Config đọc khi task bắt đầu | Giới hạn detail hiện tại |
 | --- | --- | --- |
 | `joblake_itviec` | `configs/itviec.yaml` | `null`: toàn bộ URL đủ điều kiện |
-| `joblake_vietnamworks` | `configs/vietnamworks.yaml` | 20/lượt |
-| `joblake_topdev` | `configs/topdev.yaml` | 20/lượt |
+| `joblake_vietnamworks` | `configs/vietnamworks.yaml` | `null`: toàn bộ URL đủ điều kiện |
+| `joblake_topdev` | `configs/topdev.yaml` | `null`: toàn bộ URL đủ điều kiện |
 | `joblake_topcv` | `configs/topcv.yaml` | `null`: toàn bộ URL đủ điều kiện |
 | `joblake_devwork` | `configs/devwork.yaml` | `null`: toàn bộ URL đủ điều kiện |
 | `joblake_careerviet` | `configs/careerviet.yaml` | `null`: toàn bộ URL đủ điều kiện |
 | `joblake_vieclam24h` | `configs/vieclam24h.yaml` | `null`: toàn bộ URL đủ điều kiện |
-| `joblake_careerlink` | `configs/careerlink.yaml` | `null`: toàn bộ URL đủ điều kiện |
+| `joblake_careerlink` | `configs/careerlink.yaml` | 30/lượt |
 | `joblake_jobsgo` | `configs/jobsgo.yaml` | `null`: toàn bộ URL đủ điều kiện |
 
 JobsGO dùng requests, giữ query `slug` và phân trang bằng `page`.
 DAG mặc định paused. Xem [hướng dẫn JobsGO](jobsgo.md).
 
-CareerLink dùng requests, trang đầu là URL gốc và phân trang qua `page`.
+CareerLink dùng CloakBrowser ở cả discovery/detail, trang đầu là URL gốc và phân trang qua `page`.
 DAG mặc định paused. Xem [hướng dẫn CareerLink](careerlink.md).
 
 Vieclam24h dùng requests, query `page` và giữ `sort_q`; DAG mặc định paused.
@@ -29,10 +29,13 @@ Phần mềm và DAG mặc định paused. Xem [hướng dẫn CareerViet](caree
 Devwork dùng HTTP requests cho cả discovery và detail, DAG mặc định paused.
 Xem [phạm vi, phân trang và dữ liệu Devwork](devwork.md).
 
-Giới hạn trên là giá trị YAML lúc tích hợp; thay `detail.max_jobs_per_run`
+Giới hạn trên được đối chiếu với YAML ngày 2026-10-01; thay `detail.max_jobs_per_run`
 trong config tương ứng nếu muốn thử ít hơn. Discovery và parse vẫn theo các
 giới hạn riêng trong YAML. TopDev discovery dùng requests; các phase browser
-dùng Xvfb và cấu hình browser hiện có.
+dùng Xvfb và cấu hình browser hiện có. ITviec, TopCV và VietnamWorks cũng dùng
+CloakBrowser cho cả hai phase. Tất cả nguồn dùng PostgreSQL state và MinIO;
+parse hiện không giới hạn số job mỗi lượt. CareerLink có chờ khóa 60 giây,
+dừng detail sau ba lỗi liên tiếp và không retry task detail ở Airflow.
 
 ## Chạy
 
@@ -40,7 +43,7 @@ dùng Xvfb và cấu hình browser hiện có.
 
 1. Mở http://localhost:8080.
 2. Chọn DAG cần chạy, unpause rồi Trigger.
-3. Theo dõi từng task; task lỗi tự retry tối đa 2 lần. Nếu vẫn lỗi, sửa nguyên
+3. Theo dõi từng task; task lỗi tự retry tối đa 2 lần, trừ detail CareerLink. Nếu vẫn lỗi, sửa nguyên
    nhân rồi Clear task lỗi, các phase sau cần chạy lại và `watcher`.
 
 Cả chín DAG đều `schedule=None`, `catchup=False`, không có lịch tự động.
@@ -67,9 +70,10 @@ source ngăn CLI và Airflow chạy cùng nguồn đồng thời. Pause DAG khô
 
 ## Retry và tiếp tục sau lỗi
 
-- Mỗi phase có `retries=2` (tối đa 3 lượt chạy), `retry_delay=5 phút`,
-  exponential backoff và trần 30 phút. Airflow có jitter nên thời gian chờ
-  thực tế có thể khác 5/10 phút.
+- Mỗi phase có `retries=2` (tối đa 3 lượt chạy), `retry_delay=1 phút`,
+  `retry_exponential_backoff=false`, `max_retry_delay=1 phút`. Riêng detail
+  CareerLink có `retries=0`; fetcher và state vẫn áp dụng retry URL của nguồn.
+  Không nhầm Airflow retry với backoff HTTP trong YAML.
 - `detail` và `parse` dùng `all_done`: chờ phase trước kết thúc, bao gồm retry,
   rồi chạy kể cả phase trước failed/skipped. Detail xử lý URL đủ điều kiện
   trong PostgreSQL; parse xử lý HTML đã lưu. Không có dữ liệu đủ điều kiện
@@ -83,7 +87,7 @@ source ngăn CLI và Airflow chạy cùng nguồn đồng thời. Pause DAG khô
   muốn chạy lại. Nếu chạy lại phase đầu, Clear cả phase sau và watcher để
   chúng phản ánh kết quả mới.
 
-Code và YAML mount trực tiếp, không cần build lại image khi thêm ba DAG này.
+Code và YAML mount trực tiếp, không cần build lại image khi sửa/thêm DAG dùng dependency đã có.
 Nếu scheduler đang dừng do một lượt crawl trước, kiểm tra và kết thúc run cũ
 trên UI trước khi chủ động bật lại scheduler; việc thêm DAG không yêu cầu
 khởi động lại lượt chạy cũ.
@@ -100,6 +104,13 @@ source/phase/config, lịch thủ công, pool và giới hạn đồng thời. L
 crawl website hoặc ghi dữ liệu nghiệp vụ. Tham khảo
 [hướng dẫn runtime và storage](../setup/airflow.md) để setup từ đầu.
 
-Supabase vẫn chạy bằng CLI riêng và sync tất cả source. Chưa tự nối sync vào
-các DAG: cần phối hợp thời điểm sync/verify với các lượt parse trước khi tự
-động hóa; một pool theo task không đảm bảo parse không chen giữa sync và verify.
+Supabase có CLI và DAG thủ công riêng `joblake_supabase_sync`, xử lý tất cả nguồn
+và giữ ba slot. Sync tự verify snapshot đã stage trong cùng transaction trước
+commit. Chưa tự nối ingestion với sync: chủ động chạy sau các phase cần thiết.
+Một lần verify riêng về sau có thể thấy local đã thay đổi.
+
+Health có DAG riêng `generate_report -> check_quality`, chạy lúc 07:00 khi được
+unpause. Nó phát hiện chất lượng/freshness dù source task `suspicious` vẫn xanh.
+Xem [health](data-health.md), [sync](supabase-cli.md) và [runbook](runbook.md).
+Các source task chưa đặt `execution_timeout`; timeout request không phải giới
+hạn tổng thời gian phase.

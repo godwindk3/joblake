@@ -27,7 +27,7 @@ CREATE TABLE crawl_state.jobs (
     id bigint PRIMARY KEY, source text, listing_status text, tracking_scope_hash text,
     last_seen_at timestamptz DEFAULT '2026-09-20T00:00:00Z');
 CREATE TABLE core.source_job_postings (
-    id bigint PRIMARY KEY, source_id bigint, canonical_url text, crawler_job_id bigint);
+    id bigint PRIMARY KEY, source_id bigint, canonical_url text, crawler_job_id bigint, first_seen_at timestamptz DEFAULT '2026-09-01T00:00:00Z');
 CREATE TABLE core.job_parse_results (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     source_posting_id bigint, is_current boolean DEFAULT true, quality_status text DEFAULT 'partial',
@@ -87,7 +87,7 @@ class ServingTests(unittest.TestCase):
         code = 'example' if source == 1 else 'other'
         self.execute('INSERT INTO crawl_state.jobs(id,source,listing_status,tracking_scope_hash) VALUES (%s,%s,%s,%s)',
                      (job_id, code, status, 'scope'))
-        self.execute('INSERT INTO core.source_job_postings VALUES (%s,%s,%s,%s)',
+        self.execute('INSERT INTO core.source_job_postings(id,source_id,canonical_url,crawler_job_id) VALUES (%s,%s,%s,%s)',
                      (job_id, source, f'https://{code}.test/jobs/{job_id}', job_id))
         if content:
             self.execute('''INSERT INTO core.job_parse_results(source_posting_id,title,description_text,benefit_items)

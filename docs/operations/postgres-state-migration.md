@@ -1,6 +1,6 @@
 # PostgreSQL crawler state
 
-The four source configs use `state.provider: postgres`. State lives in the
+All nine source configs use `state.provider: postgres`. State lives in the
 existing JobLake PostgreSQL database, in schema `crawl_state`; parsed output
 continues to use `core` and `ref`. MinIO keeps the same immutable HTML objects.
 Airflow metadata remains in its own database. Listing CDC is described in
@@ -17,15 +17,18 @@ The application does not create PostgreSQL tables at startup.
 Browser session files still use `data/state`, so retain the Airflow volume mount.
 The existing psycopg dependency is sufficient; no new service is required.
 
-All six state tables retain their IDs, keys, statuses and retry behavior. Times
+The original six state tables retain their IDs, keys, statuses and retry behavior.
+Later migrations add CDC and raw-cleanup metadata. Times
 use `TIMESTAMPTZ`; SQLite times without offsets are interpreted as UTC. JSON
 reports remain text. `core` crawler ID references retain their original meaning.
 
 ## Concurrency
 
-Keep the one-slot Airflow pool. Each pipeline phase acquires a dedicated session
-advisory lock for its source before recovery and holds it until exit. Another
-phase for that source fails immediately. Use `IngestionPipeline` as the entry
+The Airflow pool now has three slots for different sources. Each pipeline phase
+acquires a dedicated session advisory lock for its source before recovery and
+holds it until exit. A competing phase fails immediately by default.
+`state.source_lock_wait_seconds` supports 0–300 seconds; CareerLink currently
+uses 60 seconds to allow an earlier process to exit without stealing its lock. Use `IngestionPipeline` as the entry
 point: direct state-store calls are not a supported parallel worker API.
 
 Claims commit before HTTP/MinIO calls. Same-source parallel workers still require

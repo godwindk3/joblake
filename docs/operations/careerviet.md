@@ -48,6 +48,8 @@ toàn bộ URL đủ điều kiện (`max_jobs_per_run: null`).
 
 ## Xác minh 2026-09-18
 
+Các kết quả dưới đây chỉ mô tả đợt kiểm tra lịch sử, không xác nhận runtime hiện tại.
+
 Sau lượt chạy toàn bộ, phát hiện 30 lần validation lỗi trên 16 URL duy nhất
 (14 URL được thử lại sau thời gian chờ). Nguyên nhân là các template riêng
 của nhà tuyển dụng: title h2/h1 không có class, section h3, tiêu đề section

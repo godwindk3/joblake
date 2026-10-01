@@ -1,7 +1,7 @@
 # Location cities
 
 `ParsedJob.location_cities` is derived automatically from `locations_raw` for all
-four sources and stored as `core.job_parse_results.location_cities text[]`.
+nine sources and stored as `core.job_parse_results.location_cities text[]`.
 The original addresses are preserved. Unknown locations produce an empty array.
 The derived field does not increase the raw-field completeness score.
 
@@ -28,19 +28,20 @@ updates existing results from their stored locations without fetching websites
 or replacing parse history. Empty old `locations_raw` still requires reparsing
 saved HTML with the updated source parsers.
 
-For an existing Supabase replica, apply `scripts/supabase_location_cities.sql`
-to that database before the next sync. Do not use the full initial replica
-migration against an existing replica. Sync already transfers every column and
-therefore includes this new array; verification compares complete rows.
+Current serving sync explicitly exports `location_cities` into `serving.jobs`.
+New serving setup includes this column and its GIN index. The script
+`scripts/supabase_location_cities.sql` is only for the legacy `core` replica;
+do not apply it to the compact serving deployment. Local backfill and remote sync
+are separate actions. See [sync](../operations/supabase-cli.md).
 
 ## Website filtering
 
 ```sql
 SELECT id, title, location_cities
-FROM core.job_parse_results
-WHERE is_current
-  AND location_cities @> ARRAY['Hà Nội']::text[];
+FROM serving.jobs
+WHERE location_cities @> ARRAY['Hà Nội']::text[];
 ```
 
-The migration adds a GIN index for array containment queries. Supabase supports
-[Postgres arrays](https://supabase.com/docs/guides/database/arrays).
+V1 filters one city; v2 accepts multiple city labels and matches any overlap.
+See the [website contract](../development/serving-contract.md) for exact semantics.
+For local inspection, query current `core.job_parse_results` instead of serving.

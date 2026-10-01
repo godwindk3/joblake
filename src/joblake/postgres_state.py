@@ -1,5 +1,8 @@
 """PostgreSQL crawl state. Schema changes are managed by Alembic."""
 import json
+import logging
+import math
+import time
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime
@@ -22,14 +25,21 @@ def _state_row(cursor):
 
 
 class PostgresStateStore(PostgresCdcMixin):
-    def __init__(self, settings):
+    def __init__(self, settings, *, source_lock_wait_seconds=0):
+        if (isinstance(source_lock_wait_seconds, bool)
+                or not isinstance(source_lock_wait_seconds, (int, float))
+                or not math.isfinite(source_lock_wait_seconds)
+                or not 0 <= source_lock_wait_seconds <= 300):
+            raise ValueError("source_lock_wait_seconds must be between 0 and 300")
+        self.source_lock_wait_seconds = source_lock_wait_seconds
         self.settings = replace(settings, application_name="joblake-state")
         self._run_connection = None
         self._run_source = None
 
     @classmethod
     def from_config(cls, config):
-        return cls(PostgresSettings.from_config(config))
+        return cls(PostgresSettings.from_config(config), source_lock_wait_seconds=
+                   config.get('state', {}).get('source_lock_wait_seconds', 0))
 
     def _open_connection(self):
         if self._run_connection is not None:
@@ -53,12 +63,24 @@ class PostgresStateStore(PostgresCdcMixin):
             raise RuntimeError("This state store already owns a source run")
         with self._open_connection() as connection:
             connection.autocommit = True
-            acquired = connection.execute(
-                "SELECT pg_try_advisory_lock(hashtextextended(%s, 0)) AS acquired",
-                ("joblake-state:" + source,),
-            ).fetchone()["acquired"]
-            if not acquired:
-                raise RuntimeError(f"Another JobLake phase is running for source={source}")
+            deadline = time.monotonic() + self.source_lock_wait_seconds
+            waiting = False
+            while True:
+                acquired = connection.execute(
+                    "SELECT pg_try_advisory_lock(hashtextextended(%s, 0)) AS acquired",
+                    ("joblake-state:" + source,),
+                ).fetchone()["acquired"]
+                if acquired:
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError(f"Another JobLake phase is running for source={source}")
+                if not waiting:
+                    logging.getLogger(__name__).warning(
+                        "Waiting up to %ss for source lock: %s",
+                        self.source_lock_wait_seconds, source)
+                    waiting = True
+                time.sleep(min(1, remaining))
             self._run_connection = connection
             self._run_source = source
             try:
