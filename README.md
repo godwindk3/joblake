@@ -20,6 +20,19 @@ python -m joblake.main --config configs/topdev.yaml --phase parse
 ```
 
 `full` runs discovery and detail. Parsing is a separate restartable step.
+All nine sources currently use PostgreSQL crawl state and MinIO raw storage.
+Optional AI enrichment and active-job sync to Supabase are independent manual phases.
+
+After ingestion, generate and check data health:
+
+```powershell
+python -m joblake.data_health
+python -m joblake.health_policy
+```
+
+The report is saved before quality is evaluated by the separate Airflow gate.
+Health thresholds are configurable per source in `configs/data_health.yaml`.
+See the [operational runbook](docs/operations/runbook.md) for publishing and recovery.
 
 ## Documentation
 
@@ -31,7 +44,11 @@ python -m joblake.main --config configs/topdev.yaml --phase parse
 - [Vieclam24h source and validation](docs/operations/vieclam24h.md)
 - [CareerLink source and validation](docs/operations/careerlink.md)
 - [JobsGO source and validation](docs/operations/jobsgo.md)
-- [Development and tests](docs/development/testing.md)
+- [Development, tests and CI](docs/development/testing.md)
+- [Data health and alerts](docs/operations/data-health.md)
+- [Website search/filter contract](docs/development/serving-contract.md)
+- [Active-job serving sync](docs/operations/supabase-cli.md)
+- [Optional AI enrichment](docs/operations/enrichment.md)
 - [Maintenance scripts](scripts/README.md)
 
 ## Repository
@@ -40,7 +57,9 @@ python -m joblake.main --config configs/topdev.yaml --phase parse
 | --- | --- |
 | src/joblake/ | Application, source adapters and parsers |
 | configs/ | Source YAML configuration |
-| migrations/ | Versioned database migrations |
+| migrations/ | Local PostgreSQL Alembic migrations |
+| supabase/migrations/ | Additive serving migrations; not a complete bootstrap |
+| .github/workflows/ | Unit, PostgreSQL integration and Airflow image CI |
 | orchestration/airflow/ | Airflow image, Compose and DAGs |
 | scripts/ | Operational utilities |
 | tests/ | Automated tests and manual checks |

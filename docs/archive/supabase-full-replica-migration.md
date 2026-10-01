@@ -1,8 +1,11 @@
 # Supabase migration test
 
 > Historical full-replica procedure. The current deployment uses compact
-> `serving.jobs` / `serving.sources`; see [active-job sync](supabase-cli.md).
-> Legacy migration refuses destinations with a `serving` schema.
+> `serving.jobs` / `serving.sources`; see [active-job sync](../operations/supabase-cli.md).
+> Legacy migration refuses destinations with a `serving` schema. The historical
+> full-replica verifier is now `python -m joblake.supabase_verify`;
+> `scripts/verify_supabase_migration.py` now verifies compact serving instead.
+> The future-sync proposal below was superseded by the current active-job sync.
 
 JobLake keeps local PostgreSQL as the processed-data authority. This procedure
 copies only the curated serving schemas (`ref` and `core`) to Supabase; it never
@@ -42,7 +45,7 @@ current_database(), current_schema()`. The preflight verifies that `core` and
 
 ```powershell
 python scripts/migrate_to_supabase.py
-python scripts/verify_supabase_migration.py
+python -m joblake.supabase_verify
 ```
 
 The migration is intentionally conservative:

@@ -44,16 +44,14 @@ file and loads it when each task starts; no container rebuild is needed.
 
 1. Gemini `gemini-3.1-flash-lite`, JSON Schema, minimal thinking.
 2. Groq `openai/gpt-oss-120b`, strict JSON Schema, low reasoning.
-3. OpenRouter `nvidia/nemotron-3-super-120b-a12b:free`, strict JSON Schema via
-   `output_format: json_schema`, reasoning disabled, and a provider-specific
-   completion cap of 4096 tokens (included in quota reservations). The catalog
-   lists Nvidia as provider, independent of the Google shared pool used by the
-   former Gemma model. Live requests on 2026-09-26 returned upstream overload
-   (503 inside HTTP 200); successful extraction has NOT yet been verified.
-   Pricing filters enforce zero prompt/completion/request price; no paid fallback.
-   Dots was evaluated but not retained: its English sample passed, while Vietnamese
-   samples failed validation or were truncated. Liquid/Qwen/Gemma 31B were also
-   unavailable or did not pass testing. Gemini/Groq remain the first two routes.
+3. OpenRouter is configured but **disabled** (`enabled: false`). Its configured
+   model is `nvidia/nemotron-3-super-120b-a12b:free`, JSON Schema, reasoning off,
+   completion cap 4096 tokens. The worker skips it until explicitly enabled.
+   Pricing filters request zero-priced routing; no paid fallback is configured.
+
+These are repository settings, not a guarantee of current provider availability
+or account limits. Use the explicit synthetic provider check when validating a
+deployment; it consumes API requests.
 
 Only one successful model result is required per job content version. No model
 judges another. Quota/cooldown determines dispatch; invalid results are queued
@@ -109,9 +107,10 @@ tasks load these changes without an image rebuild. Old failed runs stay failed.
 
 Validation checks schema keys/types/enums, experience bounds, duplicates and
 verbatim evidence. It cannot guarantee semantic accuracy. No experience/remote
-inference is made from missing fields. Deployment smoke tests use synthetic JD
-text only; no existing job has been sent for backfill. A representative real-JD
-quality benchmark is still required once eligible new data arrives.
+inference is made from missing fields. The provider smoke script uses synthetic
+JD text; the historical September 26 evaluation also used real eligible jobs.
+Neither establishes accuracy across every source. Maintain a representative
+quality benchmark before increasing coverage or changing extraction policy.
 
 ## Serving contract for joblake-web
 
@@ -131,7 +130,10 @@ quality benchmark is still required once eligible new data arrives.
 have not been enqueued yet. Null does not mean zero years/no skills/onsite. After
 success a null field means the model found no explicit supported value. Detailed
 evidence, provider metadata and failures stay local. Existing raw columns and
-search RPC contracts are unchanged. New web filters/types/UI are separate work.
+`serving.search_jobs` remain compatible. The additive `serving.search_jobs_v2`
+supports experience/seniority/work-mode filters; see the
+[website contract](../development/serving-contract.md). UI deployment belongs to
+the separate frontend repository.
 
 ## Installation and verification
 
@@ -164,7 +166,7 @@ $env:JOBLAKE_TEST_SERVING='1'
 configured provider on a synthetic JD. It does not read stored jobs and is outside
 the production quota ledger; reserve manual testing headroom when using it.
 
-API references checked during implementation:
+API references used during implementation (verify current provider behavior before changes):
 
 - https://ai.google.dev/gemini-api/docs/generate-content/structured-output
 - https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite

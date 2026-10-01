@@ -1,6 +1,6 @@
 # Airflow local setup
 
-Runtime dùng chung cho bốn DAG. Xem [vận hành các source](../operations/airflow-sources.md) để biết retry, pool, giới hạn và cách trigger.
+Runtime dùng chung cho 13 DAG: chín nguồn, sync, enrichment, data health và raw cleanup. Xem [vận hành các source](../operations/airflow-sources.md) để biết retry, pool, giới hạn và cách trigger.
 
 ## Chuẩn bị và chạy
 
@@ -33,9 +33,10 @@ hay đổi target trong DAG.
 
 - `configs/` và `src/` mount read-only từ host: YAML và code Python mới được
   đọc ở lần task khởi động tiếp theo, không cần restart Airflow.
-- `data/state/` mount read-write: giữ browser state và bản SQLite dự phòng,
-  giữ được dữ liệu khi tạo lại container. Không chạy CLI host đồng thời trên
-  cùng state, vì pool chỉ điều phối task Airflow.
+- `data/state/` mount read-write: giữ browser state, diagnostics, health report
+  và các snapshot SQLite cũ nếu có. Queue hiện tại nằm trong PostgreSQL.
+  Pool chỉ điều phối Airflow; khóa PostgreSQL theo source phối hợp thêm với CLI.
+  Không cố chạy nhiều phase cùng nguồn ngoài cơ chế khóa.
 - Root `.env` mount read-only và CLI đọc lúc khởi động. Không copy secret
   vào image. Docker build context chỉ nhận các file code/dependency cần thiết.
 - `MINIO_ENDPOINT` và `POSTGRES_HOST` trong container mặc định trỏ tới
@@ -59,7 +60,9 @@ ITviec thật; màn hình ảo không đảm bảo website sẽ không chặn.
 Task gọi `python -m joblake.main --config configs/itviec.yaml --phase ... --strict`.
 `completed` và `suspicious` trả thành công; `blocked` và `failed` trả exit code 1. Exception vẫn làm process thất bại.
 
-CLI dùng `--strict` trả lỗi khi kết quả cuối là `blocked` hoặc `failed`; `suspicious` vẫn thành công để scheduler tiếp tục các phase sau. Record đã xử lý vẫn được giữ. HTTP 410 được xử lý như URL đã mất vĩnh viễn.
+Record đã xử lý vẫn được giữ. HTTP 410 được xử lý như URL đã mất vĩnh viễn.
+`watcher` làm DAG fail khi một phase fail cuối cùng; `suspicious` cần được theo
+dõi qua health report và bước `check_quality`.
 
 Sau khi sửa nguyên nhân, dùng Clear task trong UI để chạy lại bước lỗi và
 các bước downstream cần chạy lại cùng `watcher`. Parse đọc HTML đã có trong MinIO,
@@ -68,8 +71,10 @@ Clear task không bỏ qua `next_retry_at` hoặc giới hạn attempts. Một t
 công không có nghĩa toàn bộ backlog đã hết (có thể còn URL đang chờ retry).
 Record exhausted cần được xử lý theo state/parser policy, không chỉ Clear DAG.
 
-Không có lịch tự động ở lần đầu. Sau khi chạy ổn, đặt schedule trong file DAG;
-schedule, pool và Airflow retries không được điều khiển bởi YAML crawler.
+Chín source DAG, sync và enrichment không có lịch tự động. Data health có lịch
+07:00 và raw cleanup 15:00 Asia/Ho_Chi_Minh, nhưng mặc định paused; unpause mới
+kích hoạt lịch. Schedule, pool và Airflow retries nằm trong DAG, không nằm trong
+YAML crawler. Raw cleanup vẫn dry-run khi unpause nếu chưa đổi mặc định `apply`.
 
 ## Supabase
 
@@ -85,6 +90,16 @@ Chỉ job active được xuất bản, expired/unknown bị loại; mỗi tin g
 Xem [hướng dẫn Supabase](../operations/supabase-cli.md) để biết trường được lưu,
 chính sách parse lỗi và cách kiểm tra. Không chạy legacy `supabase-migrate`.
 
+## Enrichment và health
+
+- `joblake_enrichment`: chạy thủ công, mặc định `dry_run=true`; queue riêng quản
+  lý retry/quota, không tự chạy sau parse. Xem [enrichment](../operations/enrichment.md).
+- `joblake_data_health`: `generate_report -> check_quality`. Report JSON/Markdown
+  được lưu trước; check quality không retry, trả lỗi khi vượt ngưỡng. Generation
+  vẫn retry lỗi DB/file hai lần. `configs/data_health.yaml` cho phép override theo
+  nguồn; gate yêu cầu snapshot mới trong một giờ. Xem [health](../operations/data-health.md).
+- Không có dịch vụ gửi email/chat hoặc tự khắc phục dữ liệu được cấu hình.
+
 ## Kiểm tra trước khi sử dụng
 
 ```powershell
@@ -94,5 +109,6 @@ docker compose -f orchestration/airflow/compose.yaml config --quiet
 ```
 
 `check_dag.py` kiểm tra import Airflow thật, dependency ba phase và watcher, pool,
-retry và strict flag. Cần chạy thêm một batch thực tế để xác nhận browser,
+retry, strict flag, sync/enrichment và dependency health gate. CI cũng build image
+và chạy script này. Cần chạy thêm một batch thực tế để xác nhận browser,
 network và quyền ghi state của môi trường Docker trên máy.

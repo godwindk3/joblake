@@ -1,3 +1,7 @@
+> Historical snapshot. Deployment statements, counts and pending work below apply
+> to the original date, not the current checkout. Use the [documentation index](../README.md)
+> and [current serving contract](../development/serving-contract.md) for current behavior.
+
 # Hợp đồng tìm kiếm JobLake
 
 Đã triển khai trên Supabase project `joblake` (`fidjbnoudkfebpfvkaux`), PostgreSQL

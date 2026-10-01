@@ -52,7 +52,9 @@ là `detail.max_consecutive_errors: 3`, không thay đổi các source khác.
 
 Khi website lỗi kéo dài, pause riêng DAG trước khi dừng task đang chạy.
 Sau khi xác minh website trả HTML hợp lệ, unpause để tiếp tục retry; không
-reset bảng state hay bỏ qua `next_retry_at`. Thay đổi code không cập nhật
+reset bảng state hay bỏ qua `next_retry_at`. Vì DAG không có schedule, cần Trigger
+hoặc Clear task phù hợp để thực sự chạy lại; unpause một mình không tạo run mới.
+Thay đổi code không cập nhật
 tiến trình Python đã chạy, chỉ có hiệu lực khi task khởi động lại.
 
 CareerLink chờ khóa source tối đa 60 giây để tiến trình trước kịp thoát và
@@ -62,6 +64,8 @@ Detail lưu bằng chứng lỗi tại `data/state/diagnostics/careerlink/detail
 giữ tối đa 30 bộ trong 7 ngày theo cleanup khi crawl. Không lưu success thường xuyên.
 
 ## Xác minh 2026-09-25
+
+Các kết quả dưới đây là bằng chứng theo ngày, không phải trạng thái runtime hiện tại.
 
 - Run lỗi ngày 23/09 trả HTTP 200 nhưng thiếu `#job-title` trong 30 giây.
   Khi đó chưa bật diagnostics nên không có HTML lỗi để khẳng định chặn mềm,

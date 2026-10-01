@@ -21,9 +21,11 @@
   docker compose -f orchestration/airflow/compose.yaml exec airflow-scheduler bash -c 'PYTHONPATH=/opt/joblake/src python -m joblake.log_cleanup --days 14'
   ```
 
-- Change the `--days 14` argument to adjust retention. The helper
+- Add `--apply` only after reviewing the preview. Change `--days 14` to adjust retention. The helper
   fails if it cannot read Airflow state; it does not guess which logs are safe.
-- This does not clean Airflow metadata, SQLite, raw, diagnostics, browser state,
+- The helper does not currently cover the sync, enrichment, data-health or
+  raw-cleanup DAGs. Health JSON/Markdown snapshots also have no automatic retention.
+- This does not clean Airflow metadata, legacy SQLite, raw, diagnostics, browser state,
   or PostgreSQL data. DAG-processor file logs and orphan logs whose metadata
   has been deleted are deliberately excluded and need separate review.
 - Docker rotation limits container stdout/stderr, not bind-mounted task logs.

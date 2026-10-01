@@ -1,3 +1,7 @@
+> Historical snapshot. Deployment statements, counts and pending work below apply
+> to the original date, not the current checkout. Use the [documentation index](../README.md)
+> and [current serving contract](../development/serving-contract.md) for current behavior.
+
 # Rà soát và tiêu chí chốt JobLake — 2026-09-29
 
 ## Phạm vi và độ chắc chắn

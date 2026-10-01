@@ -18,6 +18,7 @@ class DataHealthTests(unittest.TestCase):
             with patch('joblake.data_health.PostgresSettings'), \
                  patch('joblake.data_health.psycopg.connect'), \
                  patch('joblake.data_health.collect_report') as collect, \
+                 patch('joblake.data_health.evaluate', return_value={'status': 'ok', 'alerts': []}), \
                  patch('joblake.data_health.save_report', return_value=[]), \
                  patch('joblake.data_health.render_markdown', return_value=''), \
                  patch('builtins.print'):

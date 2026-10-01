@@ -54,6 +54,8 @@ runtime Airflow theo hướng dẫn [Airflow](airflow-sources.md).
 
 ## Kết quả xác minh 2026-09-18
 
+Đây là kết quả theo ngày, không phải tổng số job hoặc test hiện tại của project.
+
 - Smoke test dùng `DiscoveryCrawler` và HTTP fetcher thật: 7 trang,
   138 URL duy nhất, không có target failed hoặc suspicious.
 - Fetch và parse trực tiếp ba job `14252`, `14244`, `13181`: validation

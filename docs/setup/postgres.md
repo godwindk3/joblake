@@ -1,13 +1,12 @@
 # PostgreSQL setup
 
-PostgreSQL stores parsed, curated job data. It remains separate from
-MinIO (immutable raw HTML) and SQLite (the operational crawl/parse
-queue).
+Local PostgreSQL is authoritative for crawl/parse state and normalized data.
+MinIO stores raw HTML. The Airflow stack has its own metadata database; Supabase
+receives only the compact website-serving projection.
 
-## 1. Add PostgreSQL values to `.env`
+## Configure and start
 
-Do not commit `.env`. Add these values to your existing local file, using
-a strong password of your own:
+Copy `.env.example` to `.env` if needed and supply your own credentials:
 
 ```dotenv
 POSTGRES_HOST=localhost
@@ -17,66 +16,57 @@ POSTGRES_USER=joblake
 POSTGRES_PASSWORD=replace-with-a-long-random-password
 ```
 
-`.env.example` contains the same non-secret template. Docker Compose
-uses `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` to create
-the initial database and login. The parser uses all five values.
-
-## 2. Install parser and migration dependencies
-
-The project declares Psycopg 3, SQLAlchemy, and Alembic. Install them
-into the active project environment once:
+Keep `LOCAL_DATABASE_URL` consistent with these settings; sync utilities prefer
+that URL, while crawler state, parsing and Alembic use `POSTGRES_*` settings.
+Never commit `.env`. From the root with the Python environment active:
 
 ```powershell
 python -m pip install -r requirements.txt
-```
-
-## 3. Start and verify PostgreSQL
-
-```powershell
 docker compose up -d postgres
 docker compose ps postgres
 docker compose exec postgres pg_isready -U joblake -d joblake
-docker compose exec postgres psql -U joblake -d joblake -c "SELECT version();"
+python -m alembic upgrade head
+python -m alembic current
 ```
 
-If you use different values for `POSTGRES_USER` or `POSTGRES_DB`, replace
-`joblake` in the two verification commands.
+Replace the example user/database names in `pg_isready` if customized. The core
+Compose stack uses the `postgres_data` volume. Stopping containers preserves it;
+volume reset commands do not. Airflow's separate network uses the host-published
+database port through `host.docker.internal`, not the core service name.
 
-The database data is persisted in the named Docker volume
-`postgres_data`. Stopping or recreating the container does not remove it.
-For a future application service inside the same Docker Compose network,
-use `POSTGRES_HOST=postgres`; when running Python directly on the host,
-keep `POSTGRES_HOST=localhost`.
+## Schema ownership
 
-## 4. Apply the JobLake schema
+| Schema | Purpose |
+| --- | --- |
+| `crawl_state` | Runs, discovery targets, URL state, fetch/raw/parse history, CDC and purge journal |
+| `ref` | Source catalog |
+| `core` | Source postings, versioned parse results, enrichment queue/results/quota ledger |
+| `public.alembic_version` | Local migration revision |
 
-```powershell
-alembic upgrade head
-alembic current
-```
+The current Alembic head is `62e1356fadde` (enrichment), following
+`0005_raw_cleanup`. Apply the entire chain on a new database. Airflow does not
+automatically migrate these business schemas. Supabase SQL migrations are a
+separate history and do not initialize local PostgreSQL.
 
-The first migration creates these tables:
+`core.source_job_postings.crawler_job_id` references the PostgreSQL crawl identity.
+Each parse result is unique by `(source_posting_id, raw_sha256, parser_name,
+parser_version)`. Prior versions remain available; one result per posting is
+current. Replaying the same parser/raw input is idempotent.
 
-- `ref.sources`: one source website per code.
-- `core.source_job_postings`: one canonical URL per source, linked to
-  the SQLite crawler job ID.
-- `core.job_parse_results`: immutable parser output, raw-object
-  provenance, quality metadata, and one `is_current` result per posting.
-
-The unique identity of a parse result is `(source_posting_id,
-raw_sha256, parser_name, parser_version)`. Re-running the same parser
-against the same raw HTML is therefore idempotent. A newly inserted
-parser version becomes current; prior result versions remain available
-for audit.
-
-## 5. Run and inspect parsing
+## Run and inspect
 
 ```powershell
 python -m joblake.main --config configs/itviec.yaml --phase parse
-docker compose exec postgres psql -U joblake -d joblake -c "SELECT id, canonical_url, first_seen_at, last_seen_at FROM core.source_job_postings ORDER BY id DESC LIMIT 10;"
-docker compose exec postgres psql -U joblake -d joblake -c "SELECT id, source_posting_id, parser_name, parser_version, quality_status, completeness_score, is_current FROM core.job_parse_results ORDER BY id DESC LIMIT 10;"
+python scripts/inspect_local_postgres.py
+python -m joblake.data_health
+python -m joblake.health_policy
 ```
 
-The parse command reads raw objects already recorded in SQLite and
-stored in MinIO. It does not crawl the job website. SQLite remains the
-queue and retry authority; PostgreSQL is the curated output store.
+Parse consumes existing raw metadata from `crawl_state` and content from MinIO;
+it never crawls websites. On a fresh empty database the health gate reports
+missing inventory/success history; that is not a schema installation failure.
+
+Use [local setup](local.md) for discovery/detail, [state migration](../operations/postgres-state-migration.md)
+only for legacy cutovers, and [testing](../development/testing.md) for isolated
+integration databases. Do not downgrade operational schemas to clear an error:
+CDC, raw cleanup and enrichment history require preservation.

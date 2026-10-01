@@ -1,160 +1,77 @@
 # Adding a job source
 
-JobLake separates generic crawling from website-specific behavior.
-`DiscoveryCrawler` handles fetching, delays, raw storage, metrics, and
-cross-page de-duplication. A `JobSource` adapter owns URL extraction and
-any source-specific request construction.
+A source needs a listing/detail adapter, parser, YAML config, offline fixtures
+and a DAG if it will run in Airflow. Generic fetching, state and storage should
+remain source-independent.
 
-## 1. Create an adapter
+## Adapter and parser
 
-Create `src/joblake/sources/example.py`:
+Implement `JobSource` from `joblake.sources.base`. Return absolute canonical job
+URLs from `extract_job_urls`, preserving order and removing tracking/duplicates.
+Implement `extract_last_page_number` where the site exposes a total. Override
+listing/detail request construction for path-based pagination or custom headers.
+Validation must reject redirects to another job, challenge pages and empty shells.
 
-```python
-from urllib.parse import urljoin
+Implement `JobParser` from `joblake.parsing.base`, with `source`, `version` and
+`parse(html, context) -> ParserOutput`. Return `ParsedJob` plus extraction issues;
+let shared `assess_parsed_job` determine accepted/partial/rejected quality. Preserve
+raw values and leave unavailable optional fields empty. Do not infer skills,
+industry or dates merely from the listing category. Location cities are derived
+by the shared parsed model.
 
-from bs4 import BeautifulSoup
-
-from joblake.sources import JobSource
-
-
-class ExampleSource(JobSource):
-
-    def extract_job_urls(
-        self,
-        html: str,
-        listing_url: str,
-    ) -> list[str]:
-        soup = BeautifulSoup(html, "html.parser")
-        urls = [
-            urljoin(listing_url, link["href"])
-            for link in soup.select("a.job-card[href]")
-        ]
-
-        return list(dict.fromkeys(urls))
-```
-
-The method must return absolute URLs and should remove duplicates while
-preserving order.
-
-## 2. Add a source config
-
-Create `configs/example.yaml`:
+Register defaults in `sources/factory.py` and `parsing/registry.py`, or use explicit
+adapter paths in YAML:
 
 ```yaml
 source: example
 source_adapter: joblake.sources.example.ExampleSource
-enabled: true
-
-discovery:
-  transport: requests
-  timeout_seconds: 30
-
-  pagination:
-    page_param: page
-    start_page: 1
-    max_auto_pages: 200
-
-  delay:
-    min_seconds: 5
-    max_seconds: 10
-
-  targets:
-    - name: engineering
-      base_url: https://example.com/jobs
-      params:
-        category: engineering
-
-detail:
-  transport: requests
-  timeout_seconds: 30
-  max_jobs_per_run: 50
-  delay:
-    min_seconds: 10
-    max_seconds: 20
-
-storage:
-  provider: local
-  raw_directory: data/raw
-
+parse:
+  parser_adapter: joblake.parsing.parsers.example.ExampleParser
+  max_jobs_per_run: null
+  max_attempts: 3
+  stale_after_seconds: 3600
 state:
-  discovered_jobs_file: data/state/example_jobs.jsonl
-  crawled_urls_file: data/state/example_crawled_urls.txt
+  provider: postgres
 ```
 
-Run it with:
+This is an excerpt, not a complete runnable config. Copy the nearest existing
+source config, then replace source-specific paths, targets, validation, proxy
+environment names and browser-state filenames. Keep MinIO/PostgreSQL configuration
+consistent with the deployment. Bump parser version after changing extraction
+behavior so retained raw can be reparsed.
 
-```powershell
-python -m joblake.main --config configs/example.yaml
-```
+## Pagination and CDC
 
-## Optional overrides
+Choose `detect_last_page` or `until_empty` from existing working sources. A fixed
+`total_pages`, page cap, repeated page, partial target failure or unconfirmed empty
+page cannot prove full coverage. Never infer expiry from such runs. CDC requires
+PostgreSQL state and explicitly enabled `cdc.enabled`; see [CDC](../operations/url-cdc.md).
 
-When `total_pages` is omitted, `DiscoveryCrawler` fetches the first page
-once and calls the adapter's `extract_last_page_number()` method. Add the
-method when creating a source that supports automatic pagination:
+Return a trustworthy terminal-page signal for sources using browser-driven
+pagination. `max_auto_pages` is a safety cap, not evidence that every listing was
+visited. Bump `cdc.scope_version` when adapter changes alter the business scope.
 
-```python
-def extract_last_page_number(
-    self,
-    html: str,
-    listing_url: str,
-) -> int | None:
-    # Parse the source-specific pagination HTML here.
-    # Return the absolute last page number, for example 29.
-    return last_page
-```
+Prefer requests when the configured site returns complete HTML. Browser actions
+such as scrolling/clicking belong in source configuration where supported; avoid
+hard-coding site selectors into the generic fetcher. Configure diagnostics for
+failure evidence and use source-specific browser sessions.
 
-Set `max_auto_pages` as a safety limit. To force a fixed number of pages,
-configure `total_pages`; it takes precedence and skips automatic detection.
-A target can also define its own `total_pages`.
+## Verification and operation
 
-For a source that does not expose its last page, use content-driven
-pagination:
+1. Add reduced real HTML fixtures and offline tests for pagination, URL identity,
+   redirects, challenge/shell pages, optional fields and valid parser output.
+2. Validate discovery coverage and a bounded detail batch against the source;
+   document the date and distinguish live tests from fixture tests.
+3. Run discovery, detail and parse separately with `--strict`. `full` omits parse.
+   Accepted partial results are not parse failures; inspect saved health reports.
+4. Add a manual source DAG following the existing phase/watcher pattern, update
+   `orchestration/airflow/check_dag.py`, and verify it in the real Airflow image.
+5. Update [source operations](../operations/airflow-sources.md), this documentation
+   index and the source-specific guide. Shared health defaults apply automatically
+   to source YAMLs; add an override in `configs/data_health.yaml` if justified.
+6. Review the explicit source list in `log_cleanup.py` if the new DAG's logs should
+   join that retention policy. Confirm serving publication only after a complete
+   CDC baseline and a usable parse.
 
-```yaml
-pagination:
-  page_param: page
-  start_page: 1
-  strategy: until_empty
-  max_auto_pages: 200
-  stop_after_empty_pages: 1
-  stop_after_stale_pages: 2
-```
-
-The crawler stops after the configured number of empty pages. The stale
-page limit is a second safety mechanism for sites that ignore `page` and
-keep returning the same URLs. Reaching `max_auto_pages` without either
-condition marks the discovery run as suspicious.
-
-Override `build_listing_request()` when pagination is encoded in the URL
-path or requires custom parameters. Override `build_detail_request()` when
-detail pages need different parameters or a custom referrer.
-
-Browser transports can run post-navigation actions without putting
-website-specific behavior in the generic fetcher:
-
-```yaml
-browser_actions:
-  - action: scroll
-    times: 10
-    delta_y: 1200
-    wait_after_ms: 1000
-
-  - action: click
-    selector: 'button[aria-label="Show more"]'
-    optional: true
-    scroll_into_view: true
-    wait_after_ms: 1000
-```
-
-Actions run in order after the ready selector and settle delay, but before
-the final HTML is captured and validated.
-
-Detail responses use the generic validation rules under
-`detail.validation`. Override `validate_detail_html()` in the adapter
-when a source needs stronger identity or completeness checks. Only a
-validated response is accepted into `raw_objects` and prevents that URL
-from being fetched again.
-
-No changes to `discovery.py`, `pipeline.py`, storage, or state management
-are required when adding another adapter.
+See [testing and CI](testing.md). Unit tests alone do not validate a website's
+current layout, production credentials or browser behavior.

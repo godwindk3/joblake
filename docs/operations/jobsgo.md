@@ -43,7 +43,9 @@ Config dùng MinIO/PostgreSQL hiện tại, không cần migration riêng.
 DAG `joblake_jobsgo` mặc định paused, chạy thủ công, pool `joblake_serial`.
 Detail/parse không giới hạn số job mỗi lượt (`null`).
 
-## Kiểm tra
+## Kiểm tra offline và bằng chứng ngày 2026-09-19
+
+Các số liệu/live smoke bên dưới thuộc ngày ghi nhận, không phải số lượng job hiện tại.
 
 ```powershell
 python -m unittest discover -s tests -p test_jobsgo.py

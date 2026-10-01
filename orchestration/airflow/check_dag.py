@@ -33,10 +33,10 @@ for source in ("itviec", "vietnamworks", "topdev", "topcv", "devwork", "careervi
     for task in (dag.get_task(phase) for phase in ("discovery", "detail", "parse")):
         assert task.pool == "joblake_serial"
         assert task.pool_slots == 1
-        assert task.retries == 2
-        assert task.retry_delay == timedelta(minutes=5)
-        assert task.retry_exponential_backoff is True
-        assert task.max_retry_delay == timedelta(minutes=30)
+        assert task.retries == (0 if source == 'careerlink' and task.task_id == 'detail' else 2)
+        assert task.retry_delay == timedelta(minutes=1)
+        assert task.retry_exponential_backoff is False
+        assert task.max_retry_delay == timedelta(minutes=1)
         assert task.trigger_rule == ("all_success" if task.task_id == "discovery" else "all_done")
         assert task.cwd == "/opt/joblake"
         assert not task.do_xcom_push
@@ -86,3 +86,13 @@ for preview in (False, True):
     assert ('--dry-run' in rendered) is preview
     assert '--max-jobs 5' in rendered
 print('joblake_enrichment: standalone manual DAG; logs via unbuffered CLI')
+
+bag = DagBag(dag_folder='/opt/airflow/dags/joblake_data_health.py')
+assert not bag.import_errors, bag.import_errors
+dag = bag.dags['joblake_data_health']
+assert set(dag.task_ids) == {'generate_report', 'check_quality'}
+assert dag.get_task('check_quality').upstream_task_ids == {'generate_report'}
+assert dag.get_task('check_quality').retries == 0
+assert dag.get_task('check_quality').execution_timeout == timedelta(minutes=2)
+assert dag.get_task('generate_report').retries == 2
+print('joblake_data_health: report saved before independent quality gate')

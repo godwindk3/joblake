@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from psycopg.rows import dict_row
 
 from joblake.postgres import PostgresSettings
+from joblake.health_policy import configured_sources, evaluate, load_policy
 
 
 QUERIES = {
@@ -85,6 +86,14 @@ QUERIES = {
         FROM crawl_state.parse_attempts a JOIN crawl_state.jobs j ON j.id=a.job_id
         WHERE a.started_at >= %(since)s
         GROUP BY j.source,a.status,a.error_type,a.parser_version ORDER BY j.source,attempts DESC""",
+    "parse_outcomes_in_window": """
+        WITH latest AS (
+          SELECT DISTINCT ON (job_id) job_id,status FROM crawl_state.parse_attempts
+          WHERE started_at >= %(since)s AND status <> 'parsing'
+          ORDER BY job_id,started_at DESC,id DESC)
+        SELECT j.source,a.status,count(*) jobs FROM latest a
+        JOIN crawl_state.jobs j ON j.id=a.job_id
+        GROUP BY j.source,a.status ORDER BY j.source,a.status""",
     "issue_samples": """
         WITH latest AS (
           SELECT DISTINCT ON (job_id) * FROM crawl_state.parse_attempts
@@ -157,6 +166,11 @@ def render_markdown(report):
              'Sources without jobs: ' + (', '.join(report['sources_without_jobs']) or 'none')]
     def cell(value):
         return str(value if value is not None else '—').replace('|', '\\|').replace('\n', ' ').replace('\r', ' ')
+    if 'health' in report:
+        health = report['health']
+        lines.extend(['', '## Health checks', '', 'Status: **' + health['status'] + '**', ''])
+        for alert in health['alerts']:
+            lines.append('- ' + cell('{source}: {metric}={observed}; limit={limit}'.format(**alert)))
     for name, rows in report['sections'].items():
         lines.extend(['', '## ' + name, ''])
         if not rows:
@@ -190,28 +204,22 @@ def main(argv=None):
     parser.add_argument('--window-hours', type=int, default=24)
     parser.add_argument('--stale-hours', type=int, default=6)
     parser.add_argument('--samples', type=int, default=5)
+    parser.add_argument('--thresholds', default='configs/data_health.yaml')
     args = parser.parse_args(argv)
     if not (1 <= args.window_hours <= 8760 and 1 <= args.stale_hours <= 8760 and 1 <= args.samples <= 100):
         parser.error('hours must be 1..8760 and samples must be 1..100')
     load_dotenv()
-    configs = sorted(Path(args.config_dir).glob('*.yaml'))
-    sources = []
-    for path in configs:
-        config = yaml.safe_load(path.read_text(encoding='utf-8'))
-        # This directory also contains shared settings such as enrichment.yaml.
-        if not isinstance(config, dict) or 'source' not in config:
-            continue
-        source = config['source']
-        if not isinstance(source, str) or not source.strip():
-            parser.error(f'{path}: source must be a non-empty string')
-        sources.append(source)
-    if not sources:
-        parser.error('config directory contains no source YAML files')
+    try:
+        sources = configured_sources(args.config_dir)
+        policy = load_policy(args.thresholds, sources)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        parser.error(str(exc))
     settings = PostgresSettings.from_config()
     with psycopg.connect(**settings.connection_kwargs(), row_factory=dict_row,
                          options='-c default_transaction_read_only=on -c statement_timeout=60000') as connection:
         report = collect_report(connection, sources, window_hours=args.window_hours,
                                 stale_hours=args.stale_hours, samples=args.samples)
+    report['health'] = evaluate(report, policy)
     paths = save_report(report, args.output_dir)
     print(render_markdown(report))
     print('Saved reports: ' + ', '.join(str(path) for path in paths))

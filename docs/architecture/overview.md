@@ -1,26 +1,71 @@
 # Current architecture
 
-Each source has a YAML configuration, adapter and parser. The CLI dispatches to the pipeline:
+JobLake collects nine configured sources: ITviec, TopCV, TopDev, VietnamWorks,
+Devwork, CareerViet, Vieclam24h, CareerLink and JobsGO. Each has a source adapter,
+YAML configuration and parser. The public website is maintained in a separate repo.
 
 ```text
-Source listings -> discovery -> PostgreSQL crawl_state
+Source listings -> discovery -> PostgreSQL crawl_state (URL presence / CDC)
                                     |
-                               detail fetch -> MinIO HTML
-                                                   |
-                                                 parse
-                                                   |
-                                   PostgreSQL normalized records
+                                 detail -> MinIO raw HTML
+                                              |
+                                            parse
+                                              |
+                              PostgreSQL ref + core (versioned results)
+                                  |                    |
+                          optional enrichment          |
+                                  |                    |
+                                  +---- manual sync ---+
+                                              |
+                                 Supabase serving.sources/jobs
+                                              |
+                               Search RPC v1/v2 -> joblake-web
+
+Local PostgreSQL -> data health snapshot -> independent quality check
 ```
 
-Airflow provides nine manual source DAGs with the shared three-slot `joblake_serial` pool. Each source runs discovery, detail and parse sequentially. Remote synchronization has a separate manual DAG and CLI command; enrichment is also a separate optional manual DAG. Data health and raw cleanup have daily schedules. Raw cleanup defaults to dry-run. The full CLI phase includes discovery and detail only.
+## Execution and ownership
 
-## Data model authority
+- `full` runs discovery and detail only; parse is a separate restartable phase.
+- All current source configs use PostgreSQL state and MinIO raw storage. SQLite
+  and file state remain legacy backends, not fallback storage for a failed DB.
+- Discovery finalizes URL CDC only after confirmed complete listing coverage.
+  Active/expired means observed/absent in that scope, not a verified deadline.
+- Parsed output is versioned by raw hash and parser version. Accepted and partial
+  results are usable; rejected output stays in parse-attempt diagnostics.
+- Optional enrichment has its own persistent queue, quotas and evidence checks.
+  It is not required to crawl, parse, publish or search jobs.
+- Sync takes a consistent local snapshot and atomically reconciles compact active
+  jobs remotely. Raw objects, crawl state and parse history remain local.
 
-- src/joblake/parsing/models.py: ParsedJob, context and validation issues.
-- src/joblake/parsing/validation.py: normalized-record validation.
-- migrations/versions/: persisted schema history.
-- src/joblake/postgres_state.py: PostgreSQL crawl state.
+## Orchestration
 
-The parser model uses dataclasses. The [canonical field proposal](../archive/canonical-fields-v1.md) and older architecture diagram describe earlier proposals, not the implemented schema.
+There are 13 DAGs: nine source DAGs, manual sync, optional manual enrichment,
+daily health at 07:00 and daily raw cleanup at 15:00, Asia/Ho_Chi_Minh. Scheduled
+maintenance DAGs start paused; unpause to activate their schedules. Cleanup
+defaults to dry-run. Source DAGs and sync have no automatic schedule or dependency
+between them. Airflow uses LocalExecutor and a shared three-slot pool.
 
-See [storage and state](storage-state.md), [location cities](location-cities.md) and [URL CDC](../operations/url-cdc.md).
+Source phases run sequentially with `detail`/`parse` using `all_done`; a watcher
+keeps failed phases visible in the final DAG status. `suspicious` remains exit 0.
+The health DAG saves a report before its independent `check_quality` task flags
+threshold violations. No external notification delivery is configured.
+
+See [Airflow operation](../operations/airflow-sources.md),
+[health checks](../operations/data-health.md) and the [runbook](../operations/runbook.md).
+
+## Implementation authority
+
+| Concern | Source |
+| --- | --- |
+| Parsed dataclasses and quality validation | `src/joblake/parsing/models.py`, `parsing/validation.py` |
+| Local schema history | `migrations/versions/` (Alembic) |
+| State, recovery and source locks | `src/joblake/postgres_state.py` |
+| Enrichment contract and projection | `src/joblake/enrichment/` |
+| Serving schema and synchronization | `src/joblake/supabase_sync.py`, `supabase_serving_setup.py` |
+| Search functions | `src/joblake/sql/serving_search_*.sql` |
+| Health budgets | `configs/data_health.yaml`, `src/joblake/health_policy.py` |
+| Automated verification | `.github/workflows/ci.yml` |
+
+See [storage and state](storage-state.md), [location cities](location-cities.md),
+[URL CDC](../operations/url-cdc.md) and [website contract](../development/serving-contract.md).

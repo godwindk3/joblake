@@ -1,3 +1,7 @@
+> Historical snapshot. Deployment statements, counts and pending work below apply
+> to the original date, not the current checkout. Use the [documentation index](../README.md)
+> and [current serving contract](../development/serving-contract.md) for current behavior.
+
 # Bàn giao AI enrichment cho joblake-web
 
 Ngày bàn giao: 2026-09-26. Backend: `C:/Users/admin/Desktop/joblake`.
