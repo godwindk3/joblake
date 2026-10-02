@@ -1,11 +1,14 @@
 # Optional AI enrichment
 
 Enrichment is an independent phase and Airflow DAG. Neither ingestion nor
-`supabase-sync` invokes it or depends on its success. It processes only current,
+`supabase-sync` invokes it or depends on its success. The normal `enrich` phase processes only current,
 active, accepted/partial parser results fetched at or after **2026-09-26 00:00
 Asia/Ho_Chi_Minh** (2026-09-25 17:00 UTC). Re-parsing older HTML is not eligible.
 Unchanged pre-cutoff content is excluded by comparison with local parse history.
-No historical backfill command is provided in this release.
+Explicit historical processing is available through the separate
+[`joblake_enrichment_backfill` DAG / `enrich-backfill` phase](enrichment-backfill.md).
+It has its own date/source/ID filters and defaults to a read-only dry run.
+Both workers share results, retry history, quota accounting and the session lock.
 
 ## Run in Airflow
 
@@ -58,6 +61,13 @@ judges another. Quota/cooldown determines dispatch; invalid results are queued
 for later retry, not immediately escalated to a larger model. Default maximum:
 three API attempts per content version, 15 minutes between attempts.
 
+Gemini supports grouping up to three jobs per API request. The default remains
+`batch_size: 1` until a paired live benchmark is reviewed; set Gemini's
+`batch_size: 3` in `configs/enrichment.yaml` to opt in. Groq/OpenRouter remain
+single-job requests. See [batching and its verification](enrichment-batches.md).
+The run limit counts API requests; one grouped request can attempt up to three
+jobs. Backfill's distinct `max_jobs` limit still bounds the selected job set.
+
 Budgets in YAML deliberately leave headroom below the user's displayed limits.
 Request/token reservations persist in PostgreSQL and include failures. Daily
 budgets use a conservative rolling 24-hour window, minute budgets use a rolling
@@ -91,7 +101,10 @@ tasks load these changes without an image rebuild. Old failed runs stay failed.
 ## Storage and correctness
 
 - Local: `core.job_enrichments`, `core.enrichment_attempts`,
-  `core.enrichment_provider_state`, `core.enrichment_settings`.
+  `core.enrichment_attempt_jobs`, `core.enrichment_provider_state`, `core.enrichment_settings`.
+- `enrichment_attempts` is a request ledger (one row per API call); its child
+  `enrichment_attempt_jobs` records per-job status/error. Mixed requests have
+  status `partial`. Never multiply request token usage by the number of members.
 - `core.enrichment_candidates` selects eligible content.
 - `core.current_job_enrichments` only joins results matching current input hash.
 - SHA-256 covers title, description, requirements, benefits, raw skills,
@@ -142,7 +155,10 @@ the separate frontend repository.
 .venv/Scripts/python.exe -m joblake.main --phase supabase-enrichment-setup
 ```
 
-Local migration is `62e1356fadde`; the cutoff is persisted and config must match.
+Base enrichment migration is `62e1356fadde`; request grouping adds
+`0006_enrichment_batches`. Run `alembic upgrade head` before starting updated
+workers. The grouping migration refuses to run while a worker owns the shared
+lock and preserves existing attempts/quota totals. The cutoff is persisted and config must match.
 Do not move it backwards to perform an implicit backfill. Supabase setup is an
 idempotent additive DDL transaction, preserving rows, grants and RLS. Equivalent
 SQL is versioned under `supabase/migrations/20260925113037_serving_enrichment.sql`.

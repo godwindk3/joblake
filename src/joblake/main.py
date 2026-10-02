@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 from pathlib import Path
 
@@ -29,7 +30,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--phase",
-        choices=("full", "discovery", "detail", "parse", "enrich", "supabase-test", "supabase-setup", "supabase-enrichment-setup", "supabase-migrate", "supabase-sync", "supabase-verify"),
+        choices=("full", "discovery", "detail", "parse", "enrich", "enrich-backfill", "supabase-test", "supabase-setup", "supabase-enrichment-setup", "supabase-migrate", "supabase-sync", "supabase-verify"),
         default="full",
         help=(
             "Run discovery plus detail, discovery only, "
@@ -40,8 +41,20 @@ def main() -> None:
 
     parser.add_argument("--preflight-only", action="store_true", help="Check migration without restoring")
     parser.add_argument('--enrichment-config', default='configs/enrichment.yaml')
-    parser.add_argument('--max-jobs', type=int, help='Maximum API attempts for the standalone enrich phase')
-    parser.add_argument("--dry-run", action="store_true", help="Stage and report changes without writing serving rows")
+    parser.add_argument('--max-jobs', type=int, help='Enrich: API attempts; enrich-backfill: distinct selected jobs')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--dry-run', action='store_true', help='Report without database writes or enrichment API calls')
+    mode.add_argument('--execute', action='store_true', help='Execute enrich-backfill (defaults to dry run)')
+    parser.add_argument('--backfill-options', help='Backfill parameters as a JSON object (used by Airflow)')
+    parser.add_argument('--lookback-days', type=int)
+    parser.add_argument('--date-from', help='Inclusive ISO date/time; naive values use Vietnam time')
+    parser.add_argument('--date-to', help='Exclusive ISO date/time; naive values use Vietnam time')
+    parser.add_argument('--as-of', help='Freeze the backfill window at this ISO timestamp')
+    parser.add_argument('--date-field', choices=('first_seen_at', 'posted_at', 'fetched_at'))
+    parser.add_argument('--sources', nargs='+', help='Source codes for enrich-backfill')
+    parser.add_argument('--posting-ids', nargs='+', type=int)
+    parser.add_argument('--sort-order', choices=('newest_first', 'oldest_first'))
+    parser.add_argument('--max-api-attempts', type=int)
     parser.add_argument(
         "--strict", action="store_true",
         help=(
@@ -59,10 +72,28 @@ def main() -> None:
     configure_logging(args.log_level)
     if args.preflight_only and args.phase != "supabase-migrate":
         parser.error("--preflight-only requires supabase-migrate")
-    if args.dry_run and args.phase not in ("supabase-sync", "enrich"):
-        parser.error("--dry-run requires supabase-sync or enrich")
-    if args.max_jobs is not None and args.phase != 'enrich':
-        parser.error('--max-jobs requires enrich')
+    if args.dry_run and args.phase not in ('supabase-sync', 'enrich', 'enrich-backfill'):
+        parser.error('--dry-run requires supabase-sync, enrich or enrich-backfill')
+    if args.max_jobs is not None and args.phase not in ('enrich', 'enrich-backfill'):
+        parser.error('--max-jobs requires enrich or enrich-backfill')
+    backfill_keys = ('lookback_days', 'date_from', 'date_to', 'as_of', 'date_field',
+                     'sources', 'posting_ids', 'sort_order', 'max_api_attempts')
+    if args.phase != 'enrich-backfill' and (args.execute or args.backfill_options is not None or any(
+            getattr(args, key) is not None for key in backfill_keys)):
+        parser.error('Backfill parameters require enrich-backfill')
+    if args.phase == 'enrich-backfill':
+        from joblake.enrichment.backfill import run
+        try:
+            options = json.loads(args.backfill_options) if args.backfill_options is not None else {}
+        except ValueError:
+            parser.error('--backfill-options must contain valid JSON')
+        if not isinstance(options, dict):
+            parser.error('--backfill-options must be a JSON object')
+        options.update({key: getattr(args, key) for key in (*backfill_keys, 'max_jobs')
+                        if getattr(args, key) is not None})
+        if args.dry_run or args.execute:
+            options['dry_run'] = not args.execute
+        raise SystemExit(run(args.enrichment_config, options=options))
     if args.phase == 'enrich':
         from joblake.enrichment.service import run
         raise SystemExit(run(args.enrichment_config, dry_run=args.dry_run, max_jobs=args.max_jobs))

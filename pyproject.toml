@@ -24,3 +24,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 joblake = ["sql/*.sql"]
+"joblake.skills" = ["catalogue.json"]

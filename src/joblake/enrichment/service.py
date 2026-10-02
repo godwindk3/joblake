@@ -10,8 +10,8 @@ from pathlib import Path
 import psycopg
 import yaml
 
-from joblake.enrichment.providers import ProviderError, extract
-from joblake.enrichment.schema import PROMPT, SCHEMA, input_text, validate
+from joblake.enrichment.providers import ProviderError, extract, extract_batch
+from joblake.enrichment.schema import PROMPT, SCHEMA, input_text, validate, batch_contract, validate_batch
 from joblake.enrichment.store import Store
 
 LOGGER = logging.getLogger(__name__)
@@ -27,6 +27,8 @@ def load_config(path):
             raise ValueError(f'Invalid {field}')
     if config['request_timeout_seconds'] > 120 or config['max_attempts'] > 10:
         raise ValueError('Request timeout/attempts exceeds safety bound')
+    if type(config.get('calibrate_input_tokens', False)) is not bool:
+        raise ValueError('Invalid calibrate_input_tokens')
     seen = set()
     for p in config['providers']:
         if p['name'] not in ('gemini', 'groq', 'openrouter') or p['name'] in seen:
@@ -47,19 +49,46 @@ def load_config(path):
             raise ValueError('reasoning_enabled must be boolean')
         if 'max_output_tokens' in p and (type(p['max_output_tokens']) is not int or p['max_output_tokens'] < 1):
             raise ValueError('Provider max_output_tokens must be positive')
+        size = p.get('batch_size', 1)
+        if type(size) is not int or not 1 <= size <= 3 or (p['name'] != 'gemini' and size != 1):
+            raise ValueError('batch_size must be 1..3 for Gemini and 1 for other providers')
+        if type(p.get('batch_max_input_tokens', 12000)) is not int or p.get('batch_max_input_tokens', 12000) < 1:
+            raise ValueError('Invalid batch_max_input_tokens')
     if not seen:
         raise ValueError('At least one provider is required')
     return config
 
 
-def estimate_tokens(payload, output):
+def input_bytes(payload, *, batch=False):
+    prompt, schema = PROMPT, SCHEMA
+    if batch:
+        prompt, schema, payload = batch_contract(payload)
+    return len((input_text(payload) + prompt + json.dumps(schema)).encode('utf-8'))
+
+
+def estimate_tokens(payload, output, *, ratio=0.5, batch=False):
     # Conservative estimate, not a tokenizer. Actual usage reconciles the ledger.
     # Include schema/system overhead and the whole completion (including reasoning).
-    size = len((input_text(payload) + PROMPT + json.dumps(SCHEMA)).encode('utf-8'))
-    return math.ceil(size / 2) + output
+    return math.ceil(input_bytes(payload, batch=batch) * ratio) + output
 
 
-def process(store, config, *, call=extract, clock=time.monotonic, sleep=time.sleep):
+def group_jobs(head, followers, provider, output_per_job, *, ratio=0.5):
+    selected = [head]
+    if head['attempts'] or provider.get('batch_size', 1) == 1:
+        return selected
+    for follower in followers[:provider.get('batch_size', 1) - 1]:
+        proposed = selected + [follower]
+        output = output_per_job * len(proposed)
+        total = estimate_tokens(proposed, output, ratio=ratio, batch=True)
+        if total - output > provider.get('batch_max_input_tokens', 12000):
+            break
+        if total > min(provider['tokens_per_minute'], provider['tokens_per_day']):
+            break
+        selected = proposed
+    return selected
+
+
+def process(store, config, *, call=extract, batch_call=extract_batch, clock=time.monotonic, sleep=time.sleep):
     providers = [p for p in config['providers'] if p.get('enabled', True) and os.getenv(p['key_env'])]
     if not providers:
         LOGGER.error('No enrichment API keys configured; queue retained, sync remains independent')
@@ -69,14 +98,19 @@ def process(store, config, *, call=extract, clock=time.monotonic, sleep=time.sle
                     p['name'], p['model'], bool(os.getenv(p['key_env'])), p.get('enabled', True),
                     p['requests_per_day'], p['tokens_per_day'])
     deadline = clock() + config['max_run_seconds']
-    attempted = succeeded = errors = 0
+    attempted = attempted_jobs = succeeded = errors = 0
+    ratios = {}
+    for provider in providers:
+        for is_batch in (False, True):
+            ratio = store.input_token_ratio(provider, batch=is_batch) if config.get('calibrate_input_tokens', False) else 0.5
+            ratios[provider['name'], is_batch] = ratio if type(ratio) in (int, float) and math.isfinite(ratio) and ratio > 0 else 0.5
     last_wait_log = 0
     while attempted < config['max_jobs_per_run'] and clock() < deadline:
         job = store.next_job(config['max_attempts'])
         if job is None:
             break
         estimates = {p['name']: estimate_tokens(job['input_payload'],
-                     p.get('max_output_tokens', config['max_output_tokens'])) for p in providers}
+                     p.get('max_output_tokens', config['max_output_tokens']), ratio=ratios[p['name'], False]) for p in providers}
         # Oversized inputs remain visible for manual review; never silently truncate JD.
         if all(estimates[p['name']] > min(p['tokens_per_minute'], p['tokens_per_day']) for p in providers):
             store.c.execute("""UPDATE core.job_enrichments SET status='failed',
@@ -86,10 +120,24 @@ def process(store, config, *, call=extract, clock=time.monotonic, sleep=time.sle
             continue
         selected = None
         for provider in providers:
-            tokens = estimates[provider['name']]
-            attempt = store.reserve(job, provider, tokens)
-            if attempt is not None:
-                selected = provider
+            jobs = [job]
+            per_job_output = provider.get('max_output_tokens', config['max_output_tokens'])
+            if provider.get('batch_size', 1) > 1 and job['attempts'] == 0:
+                followers = store.batch_followers(job, config['max_attempts'], provider['batch_size'] - 1)
+                jobs = group_jobs(job, followers, provider, per_job_output, ratio=ratios[provider['name'], True])
+            # Shrink when the full group does not fit the remaining quota; then try fallback providers.
+            while jobs:
+                output = per_job_output * len(jobs)
+                payload = jobs if len(jobs) > 1 else job['input_payload']
+                tokens = estimate_tokens(payload, output, ratio=ratios[provider['name'], len(jobs) > 1], batch=len(jobs) > 1)
+                reserve = store.reserve_batch if len(jobs) > 1 else store.reserve
+                attempt = reserve(jobs if len(jobs) > 1 else job, provider, tokens,
+                                  input_bytes=input_bytes(payload, batch=len(jobs) > 1), max_attempts=config['max_attempts'])
+                if attempt is not None:
+                    selected = provider
+                    break
+                jobs = jobs[:-1]
+            if selected is not None:
                 break
         if selected is None:
             if not any(store.can_retry_soon([p], estimates[p['name']]) for p in providers):
@@ -101,35 +149,49 @@ def process(store, config, *, call=extract, clock=time.monotonic, sleep=time.sle
             sleep(min(5, max(0, deadline - clock())))
             continue
         attempted += 1
+        attempted_jobs += len(jobs)
         started = clock()
-        actual = None
-        LOGGER.info('Enrich start id=%s posting=%s provider=%s model=%s attempt=%s estimated_tokens=%s',
-                    job['id'], job['source_posting_id'], selected['name'], selected['model'],
-                    job['attempts'] + 1, tokens)
+        response = None
+        LOGGER.info('Enrich request=%s provider=%s jobs=%s reserved_tokens=%s max_output_tokens=%s',
+                    attempt, selected['name'], len(jobs), tokens, output)
+        for member in jobs:
+            LOGGER.info('Enrich start id=%s posting=%s provider=%s model=%s attempt=%s request=%s',
+                        member['id'], member['source_posting_id'], selected['name'], selected['model'],
+                        member['attempts'] + 1, attempt)
         try:
-            response = call(selected, job['input_payload'], max_output=selected.get('max_output_tokens', config['max_output_tokens']),
-                            timeout=config['request_timeout_seconds'])
-            actual = response.tokens
-            result = validate(response.data, job['input_payload'])
+            if len(jobs) > 1:
+                response = batch_call(selected, jobs, max_output=output, timeout=config['request_timeout_seconds'])
+                outcomes = validate_batch(response.data, jobs)
+            else:
+                response = call(selected, job['input_payload'], max_output=output, timeout=config['request_timeout_seconds'])
+                outcomes = {job['id']: (validate(response.data, job['input_payload']), None)}
         except ProviderError as exc:
             store.block(selected['name'], exc.code, exc.cooldown)
-            store.finish(job, attempt, error=exc.code, max_attempts=config['max_attempts'])
-            LOGGER.warning('Enrich id=%s provider=%s error=%s cooldown_seconds=%s',
-                           job['id'], selected['name'], exc.code, exc.cooldown)
-            errors += 1
+            outcomes = {member['id']: (None, exc.code) for member in jobs}
+            LOGGER.warning('Enrich request=%s provider=%s error=%s cooldown_seconds=%s',
+                           attempt, selected['name'], exc.code, exc.cooldown)
         except ValueError as exc:
             # Validator errors are fixed local codes, never provider text.
-            store.finish(job, attempt, error=str(exc), tokens=actual, max_attempts=config['max_attempts'])
-            LOGGER.warning('Enrich id=%s provider=%s validation=%s field=%s',
-                           job['id'], selected['name'], str(exc), getattr(exc, 'field', None))
-            errors += 1
+            outcomes = {member['id']: (None, str(exc)) for member in jobs}
+        usage = dict(tokens=response.tokens if response else None,
+                     input_tokens=response.input_tokens if response else None,
+                     output_tokens=response.output_tokens if response else None, max_attempts=config['max_attempts'])
+        if len(jobs) > 1:
+            store.finish_batch(jobs, attempt, outcomes, **usage)
         else:
-            store.finish(job, attempt, result=result, tokens=actual)
-            succeeded += 1
-            LOGGER.info('Enrich success id=%s provider=%s tokens=%s elapsed_seconds=%.1f',
-                        job['id'], selected['name'], actual, clock() - started)
-    LOGGER.info('Enrichment complete attempted=%s succeeded=%s errors=%s queue=%s',
-                attempted, succeeded, errors, store.summary())
+            result, error = outcomes[job['id']]
+            store.finish(job, attempt, result=result, error=error, **usage)
+        for member in jobs:
+            _, error = outcomes[member['id']]
+            errors += int(error is not None)
+            succeeded += int(error is None)
+            LOGGER.log(logging.WARNING if error else logging.INFO,
+                       'Enrich result id=%s posting=%s request=%s status=%s error=%s', member['id'],
+                       member['source_posting_id'], attempt, 'retry_or_failed' if error else 'succeeded', error)
+        LOGGER.info('Enrich request=%s actual_tokens=%s elapsed_seconds=%.1f',
+                    attempt, usage['tokens'], clock() - started)
+    LOGGER.info('Enrichment complete api_requests=%s attempted_jobs=%s succeeded=%s errors=%s queue=%s',
+                attempted, attempted_jobs, succeeded, errors, store.summary())
     outcome = 'failed' if errors and not succeeded else ('completed_with_errors' if errors else 'completed')
     LOGGER.log(logging.ERROR if outcome == 'failed' else logging.WARNING if errors else logging.INFO,
                'Enrichment outcome=%s; successful results persisted; sync is a separate DAG', outcome)
