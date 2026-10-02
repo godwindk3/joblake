@@ -1,5 +1,6 @@
 """Check all source DAGs in Airflow's runtime, without executing tasks."""
 import shlex
+import json
 from datetime import timedelta
 from airflow.dag_processing.dagbag import DagBag
 
@@ -86,6 +87,34 @@ for preview in (False, True):
     assert ('--dry-run' in rendered) is preview
     assert '--max-jobs 5' in rendered
 print('joblake_enrichment: standalone manual DAG; logs via unbuffered CLI')
+
+bag = DagBag(dag_folder='/opt/airflow/dags/joblake_enrichment_backfill.py')
+assert not bag.import_errors, bag.import_errors
+dag = bag.dags['joblake_enrichment_backfill']
+assert dag.schedule is None and not dag.catchup
+assert dag.is_paused_upon_creation is True
+assert dag.max_active_runs == 1 and dag.max_active_tasks == 1
+assert str(dag.timezone) == 'Asia/Ho_Chi_Minh'
+assert set(dag.task_ids) == {'backfill_jobs'}
+assert dag.params['dry_run'] is True and dag.params['lookback_days'] == 30
+assert dag.params['date_field'] == 'first_seen_at' and dag.params['sort_order'] == 'newest_first'
+task = dag.get_task('backfill_jobs')
+assert task.pool == 'joblake_serial' and task.pool_slots == 1 and task.retries == 0
+assert task.execution_timeout == timedelta(minutes=25)
+assert not task.do_xcom_push and task.append_env
+assert task.cwd == '/opt/joblake'
+assert not task.upstream_task_ids and not task.downstream_task_ids
+assert shlex.split(task.bash_command) == [
+    'exec', '/opt/joblake/venv/bin/python', '-u', '-m', 'joblake.main',
+    '--phase', 'enrich-backfill', '--backfill-options', '$JOBLAKE_BACKFILL_OPTIONS',
+]
+for preview in (False, True):
+    params = dict(dag.params)
+    params.update(dry_run=preview, max_jobs=5, sources=['topcv', 'quote"$(exit 99)'])
+    rendered_env = task.render_template(task.env, {'params': params})
+    assert json.loads(rendered_env['JOBLAKE_BACKFILL_OPTIONS']) == params
+    assert task.render_template(task.bash_command, {'params': params}) == task.bash_command
+print('joblake_enrichment_backfill: manual preview by default; parameters passed as JSON data')
 
 bag = DagBag(dag_folder='/opt/airflow/dags/joblake_data_health.py')
 assert not bag.import_errors, bag.import_errors

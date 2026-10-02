@@ -33,6 +33,7 @@ repository root unless a page says otherwise.
 - [Adding a source](development/adding-source.md): adapter, parser, fixtures and registration.
 - [Testing and CI](development/testing.md): unit, disposable SQL databases and Airflow image checks.
 - [Website serving contract](development/serving-contract.md): search v1/v2, filters, dates and enrichment UI.
+- [Skills and filtered insights plan](development/skills-and-insights-plan.md): proposed cross-repository roadmap; not yet implemented.
 
 ## Historical evidence
 

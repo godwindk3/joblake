@@ -1,14 +1,17 @@
-# Only HTML fetched on/after this time is eligible. No historical backfill.
+# Normal enrichment cutoff. Explicit enrich-backfill uses its own date filters.
 eligible_from: '2026-09-26T00:00:00+07:00'
 max_jobs_per_run: 100
 max_run_seconds: 1200
 max_attempts: 3
 max_output_tokens: 2048
 request_timeout_seconds: 60
+calibrate_input_tokens: true # Learns from >=20 measured requests; reserves full output cap.
 providers:
   - name: gemini
     model: gemini-3.1-flash-lite
     key_env: GEMINI_API_KEY
+    batch_size: 1 # Set to 3 after the paired benchmark passes.
+    batch_max_input_tokens: 12000
     requests_per_minute: 12
     tokens_per_minute: 200000
     requests_per_day: 400

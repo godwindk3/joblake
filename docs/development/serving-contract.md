@@ -136,3 +136,13 @@ Then test the actual frontend separately: prefix/aliases, source/city filters,
 unknown combinations, dates, pagination, old unenriched jobs and detail pages.
 Frontend cache/deployment behavior is owned by its separate repository; database
 smoke tests do not establish current UI behavior.
+
+## Skills/insights serving v3 (2026-10-02)
+
+Additive migrations20261002132327_skills_insights,20261002133754_skills_query_optimization,20261002134007_skills_search_direct_plan đã áp dụng; tên file local khớp version history Supabase. search_jobs_v1/v2 giữ nguyên để rollback.
+
+serving.jobs thêm required_skill_keys/preferred_skill_keys generated STORED, hai GIN indexes. Chỉ ánh xạ skills_required/preferred khi succeeded; required thắng preferred. Registry version2026-10-02.1 tại joblake.skills/catalogue.json; local view core.current_job_skills dùng cùng mapping. Không cần đổi input sync, không dùng AI mới để tạo projection.
+
+search_jobs_v3 bổ sung p_skills(max10),p_skill_match(any/all),p_skill_scope(required/all) trước sort/limit/offset; summary thêm hai key arrays, giữ nguyên FTS/ranking/date filters. job_statistics_v1 nhận cùng filter, trả tổng/rows/coverage/calculatedAt. Predicate được sinh từ một nguồn qua scripts/generate_skills_sql.py; count DISTINCT mỗi posting/bucket, không gộp trùng khác nguồn.
+
+Không mở anon/authenticated/PUBLIC execute. Reader vẫn chỉ đọc. Web catalogue static phải đồng bộ registry; thay mapping IMMUTABLE phải migration tính lại generated STORED cho hàng cũ. Quy trình audit, kết quả test/benchmark, giới hạn coverage, firewall và rollback: [runbook](../operations/skills-insights.md).

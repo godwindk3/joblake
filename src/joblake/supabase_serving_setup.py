@@ -29,6 +29,7 @@ def main():
             c.execute(files('joblake').joinpath('sql/serving_search_v1.sql').read_text(encoding='utf-8'))
             c.execute(files('joblake').joinpath('sql/serving_search_prefix.sql').read_text(encoding='utf-8'))
             c.execute(files('joblake').joinpath('sql/serving_search_v2.sql').read_text(encoding='utf-8'))
+            c.execute(files('joblake').joinpath('sql/serving_skills.sql').read_text(encoding='utf-8'))
         LOGGER.info('SUCCESS: empty serving.sources and serving.jobs created with RLS')
         return 0
     except psycopg.Error as exc:

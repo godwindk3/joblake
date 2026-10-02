@@ -62,6 +62,46 @@ def input_text(payload):
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
+def batch_contract(jobs):
+    """Keep every JD and result explicitly addressed; never match by array position."""
+    ids = [str(job['id']) for job in jobs]
+    if not 2 <= len(ids) <= 3 or len(set(ids)) != len(ids):
+        raise ValueError('invalid_batch_size_or_ids')
+    prompt = PROMPT + ('\nProcess each entry in jobs independently. Return one result per job_id. '
+                      'Copy its job_id exactly. Use only that job\'s data as evidence; never borrow '
+                      'skills, experience or quotes from another job. Return {"jobs": '
+                      '[{"job_id": "...", "result": {...}}]}.')
+    schema = object_schema({'jobs': {'type': 'array', 'minItems': len(ids), 'maxItems': len(ids),
+                                    'items': object_schema({'job_id': {'type': 'string', 'enum': ids},
+                                                            'result': SCHEMA})}})
+    payload = {'jobs': [{'job_id': str(job['id']), 'data': job['input_payload']} for job in jobs]}
+    return prompt, schema, payload
+
+
+def validate_batch(data, jobs):
+    expected = {str(job['id']): job for job in jobs}
+    if not isinstance(data, dict) or set(data) != {'jobs'} or not isinstance(data['jobs'], list):
+        return {job['id']: (None, 'invalid_batch_response') for job in jobs}
+    by_id = {}
+    for item in data['jobs']:
+        if not isinstance(item, dict) or not isinstance(item.get('job_id'), str) or item['job_id'] not in expected:
+            return {job['id']: (None, 'unknown_batch_job') for job in jobs}
+        by_id.setdefault(item['job_id'], []).append(item)
+    outcomes = {}
+    for key, job in expected.items():
+        items = by_id.get(key, [])
+        if len(items) != 1:
+            outcomes[job['id']] = (None, 'missing_batch_job' if not items else 'duplicate_batch_job')
+            continue
+        try:
+            if set(items[0]) != {'job_id', 'result'}:
+                raise ValueError('invalid_batch_item')
+            outcomes[job['id']] = (validate(items[0]['result'], job['input_payload']), None)
+        except ValueError as exc:
+            outcomes[job['id']] = (None, str(exc))
+    return outcomes
+
+
 class ValidationError(ValueError):
     """Safe code and field only; never contains source text or model output."""
     def __init__(self, code, field=None):

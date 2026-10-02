@@ -1,0 +1,1235 @@
+[
+  {
+    "key": "3dsmax",
+    "label": "3ds Max",
+    "aliases": [
+      "3D Studio Max"
+    ]
+  },
+  {
+    "key": "accounting",
+    "label": "Kế toán",
+    "aliases": []
+  },
+  {
+    "key": "active-directory",
+    "label": "Active Directory",
+    "aliases": []
+  },
+  {
+    "key": "after-effects",
+    "label": "Adobe After Effects",
+    "aliases": [
+      "After Effects"
+    ]
+  },
+  {
+    "key": "agile",
+    "label": "Agile",
+    "aliases": []
+  },
+  {
+    "key": "ai",
+    "label": "AI",
+    "aliases": [
+      "Artificial Intelligence"
+    ]
+  },
+  {
+    "key": "airflow",
+    "label": "Apache Airflow",
+    "aliases": [
+      "Airflow"
+    ]
+  },
+  {
+    "key": "android",
+    "label": "Android",
+    "aliases": []
+  },
+  {
+    "key": "angular",
+    "label": "Angular",
+    "aliases": []
+  },
+  {
+    "key": "ansible",
+    "label": "Ansible",
+    "aliases": []
+  },
+  {
+    "key": "apache",
+    "label": "Apache HTTP Server",
+    "aliases": []
+  },
+  {
+    "key": "api",
+    "label": "API",
+    "aliases": []
+  },
+  {
+    "key": "api-testing",
+    "label": "API testing",
+    "aliases": []
+  },
+  {
+    "key": "argocd",
+    "label": "Argo CD",
+    "aliases": [
+      "ArgoCD"
+    ]
+  },
+  {
+    "key": "aspnet",
+    "label": "ASP.NET",
+    "aliases": []
+  },
+  {
+    "key": "aspnet-core",
+    "label": "ASP.NET Core",
+    "aliases": []
+  },
+  {
+    "key": "autocad",
+    "label": "AutoCAD",
+    "aliases": []
+  },
+  {
+    "key": "aws",
+    "label": "AWS",
+    "aliases": [
+      "Amazon Web Services"
+    ]
+  },
+  {
+    "key": "azure",
+    "label": "Azure",
+    "aliases": [
+      "Microsoft Azure"
+    ]
+  },
+  {
+    "key": "azure-devops",
+    "label": "Azure DevOps",
+    "aliases": []
+  },
+  {
+    "key": "b2b-sales",
+    "label": "Sales B2B",
+    "aliases": [
+      "B2B Sales"
+    ]
+  },
+  {
+    "key": "bash",
+    "label": "Bash",
+    "aliases": []
+  },
+  {
+    "key": "big-data",
+    "label": "Big Data",
+    "aliases": []
+  },
+  {
+    "key": "bigquery",
+    "label": "BigQuery",
+    "aliases": []
+  },
+  {
+    "key": "blender",
+    "label": "Blender",
+    "aliases": []
+  },
+  {
+    "key": "bootstrap",
+    "label": "Bootstrap",
+    "aliases": []
+  },
+  {
+    "key": "bpmn",
+    "label": "BPMN",
+    "aliases": []
+  },
+  {
+    "key": "brd",
+    "label": "BRD",
+    "aliases": []
+  },
+  {
+    "key": "business-analysis",
+    "label": "Phân tích nghiệp vụ",
+    "aliases": [
+      "Business Analysis"
+    ]
+  },
+  {
+    "key": "c",
+    "label": "C",
+    "aliases": []
+  },
+  {
+    "key": "canva",
+    "label": "Canva",
+    "aliases": []
+  },
+  {
+    "key": "capcut",
+    "label": "CapCut",
+    "aliases": []
+  },
+  {
+    "key": "chatgpt",
+    "label": "ChatGPT",
+    "aliases": []
+  },
+  {
+    "key": "chinese",
+    "label": "Tiếng Trung",
+    "aliases": [
+      "Chinese"
+    ]
+  },
+  {
+    "key": "cicd",
+    "label": "CI/CD",
+    "aliases": []
+  },
+  {
+    "key": "claude",
+    "label": "Claude",
+    "aliases": []
+  },
+  {
+    "key": "communication",
+    "label": "Giao tiếp",
+    "aliases": [
+      "Kỹ năng giao tiếp"
+    ]
+  },
+  {
+    "key": "confluence",
+    "label": "Confluence",
+    "aliases": []
+  },
+  {
+    "key": "content-marketing",
+    "label": "Content Marketing",
+    "aliases": []
+  },
+  {
+    "key": "copywriting",
+    "label": "Copywriting",
+    "aliases": []
+  },
+  {
+    "key": "cplusplus",
+    "label": "C++",
+    "aliases": [
+      "CPP"
+    ]
+  },
+  {
+    "key": "crm",
+    "label": "CRM",
+    "aliases": []
+  },
+  {
+    "key": "csharp",
+    "label": "C#",
+    "aliases": [
+      "CSharp"
+    ]
+  },
+  {
+    "key": "css",
+    "label": "CSS",
+    "aliases": []
+  },
+  {
+    "key": "css3",
+    "label": "CSS3",
+    "aliases": []
+  },
+  {
+    "key": "customer-service",
+    "label": "Chăm sóc khách hàng",
+    "aliases": [
+      "CSKH"
+    ]
+  },
+  {
+    "key": "cypress",
+    "label": "Cypress",
+    "aliases": []
+  },
+  {
+    "key": "dart",
+    "label": "Dart",
+    "aliases": []
+  },
+  {
+    "key": "data-analysis",
+    "label": "Data Analysis",
+    "aliases": [
+      "Phân tích dữ liệu"
+    ]
+  },
+  {
+    "key": "data-modeling",
+    "label": "Data modeling",
+    "aliases": []
+  },
+  {
+    "key": "data-warehouse",
+    "label": "Data Warehouse",
+    "aliases": []
+  },
+  {
+    "key": "databricks",
+    "label": "Databricks",
+    "aliases": []
+  },
+  {
+    "key": "dbt",
+    "label": "dbt",
+    "aliases": []
+  },
+  {
+    "key": "design-patterns",
+    "label": "Design Patterns",
+    "aliases": []
+  },
+  {
+    "key": "design-system",
+    "label": "Design System",
+    "aliases": []
+  },
+  {
+    "key": "devops",
+    "label": "DevOps",
+    "aliases": []
+  },
+  {
+    "key": "devsecops",
+    "label": "DevSecOps",
+    "aliases": []
+  },
+  {
+    "key": "digital-marketing",
+    "label": "Digital Marketing",
+    "aliases": []
+  },
+  {
+    "key": "django",
+    "label": "Django",
+    "aliases": []
+  },
+  {
+    "key": "dns",
+    "label": "DNS",
+    "aliases": []
+  },
+  {
+    "key": "docker",
+    "label": "Docker",
+    "aliases": []
+  },
+  {
+    "key": "dotnet",
+    "label": ".NET",
+    "aliases": [
+      "Dotnet"
+    ]
+  },
+  {
+    "key": "dotnet-core",
+    "label": ".NET Core",
+    "aliases": [
+      "Dotnet Core"
+    ]
+  },
+  {
+    "key": "elasticsearch",
+    "label": "Elasticsearch",
+    "aliases": []
+  },
+  {
+    "key": "english",
+    "label": "Tiếng Anh",
+    "aliases": [
+      "English"
+    ]
+  },
+  {
+    "key": "erp",
+    "label": "ERP",
+    "aliases": []
+  },
+  {
+    "key": "etl",
+    "label": "ETL",
+    "aliases": []
+  },
+  {
+    "key": "excel",
+    "label": "Excel",
+    "aliases": [
+      "Microsoft Excel"
+    ]
+  },
+  {
+    "key": "express",
+    "label": "Express.js",
+    "aliases": [
+      "ExpressJS",
+      "Express"
+    ]
+  },
+  {
+    "key": "facebook-ads",
+    "label": "Facebook Ads",
+    "aliases": []
+  },
+  {
+    "key": "fastapi",
+    "label": "FastAPI",
+    "aliases": []
+  },
+  {
+    "key": "figma",
+    "label": "Figma",
+    "aliases": []
+  },
+  {
+    "key": "financial-analysis",
+    "label": "Phân tích tài chính",
+    "aliases": [
+      "Financial Analysis"
+    ]
+  },
+  {
+    "key": "firebase",
+    "label": "Firebase",
+    "aliases": []
+  },
+  {
+    "key": "flask",
+    "label": "Flask",
+    "aliases": []
+  },
+  {
+    "key": "flutter",
+    "label": "Flutter",
+    "aliases": []
+  },
+  {
+    "key": "gcp",
+    "label": "GCP",
+    "aliases": [
+      "Google Cloud Platform"
+    ]
+  },
+  {
+    "key": "git",
+    "label": "Git",
+    "aliases": []
+  },
+  {
+    "key": "github",
+    "label": "GitHub",
+    "aliases": []
+  },
+  {
+    "key": "github-actions",
+    "label": "GitHub Actions",
+    "aliases": []
+  },
+  {
+    "key": "gitlab",
+    "label": "GitLab",
+    "aliases": []
+  },
+  {
+    "key": "gitlab-ci",
+    "label": "GitLab CI",
+    "aliases": []
+  },
+  {
+    "key": "go",
+    "label": "Go",
+    "aliases": [
+      "Golang"
+    ]
+  },
+  {
+    "key": "google-ads",
+    "label": "Google Ads",
+    "aliases": []
+  },
+  {
+    "key": "google-analytics",
+    "label": "Google Analytics",
+    "aliases": []
+  },
+  {
+    "key": "google-sheets",
+    "label": "Google Sheets",
+    "aliases": []
+  },
+  {
+    "key": "grafana",
+    "label": "Grafana",
+    "aliases": []
+  },
+  {
+    "key": "graphql",
+    "label": "GraphQL",
+    "aliases": []
+  },
+  {
+    "key": "grpc",
+    "label": "gRPC",
+    "aliases": []
+  },
+  {
+    "key": "hadoop",
+    "label": "Hadoop",
+    "aliases": []
+  },
+  {
+    "key": "helm",
+    "label": "Helm",
+    "aliases": []
+  },
+  {
+    "key": "hive",
+    "label": "Hive",
+    "aliases": []
+  },
+  {
+    "key": "hrm",
+    "label": "HRM",
+    "aliases": []
+  },
+  {
+    "key": "html",
+    "label": "HTML",
+    "aliases": []
+  },
+  {
+    "key": "html5",
+    "label": "HTML5",
+    "aliases": []
+  },
+  {
+    "key": "illustrator",
+    "label": "Adobe Illustrator",
+    "aliases": [
+      "Illustrator"
+    ]
+  },
+  {
+    "key": "indesign",
+    "label": "Adobe InDesign",
+    "aliases": [
+      "InDesign"
+    ]
+  },
+  {
+    "key": "ios",
+    "label": "iOS",
+    "aliases": []
+  },
+  {
+    "key": "iso27001",
+    "label": "ISO 27001",
+    "aliases": [
+      "ISO27001"
+    ]
+  },
+  {
+    "key": "japanese",
+    "label": "Tiếng Nhật",
+    "aliases": [
+      "Japanese"
+    ]
+  },
+  {
+    "key": "java",
+    "label": "Java",
+    "aliases": []
+  },
+  {
+    "key": "javascript",
+    "label": "JavaScript",
+    "aliases": [
+      "JS"
+    ]
+  },
+  {
+    "key": "jenkins",
+    "label": "Jenkins",
+    "aliases": []
+  },
+  {
+    "key": "jest",
+    "label": "Jest",
+    "aliases": []
+  },
+  {
+    "key": "jira",
+    "label": "Jira",
+    "aliases": []
+  },
+  {
+    "key": "jmeter",
+    "label": "JMeter",
+    "aliases": []
+  },
+  {
+    "key": "jquery",
+    "label": "jQuery",
+    "aliases": []
+  },
+  {
+    "key": "junit",
+    "label": "JUnit",
+    "aliases": []
+  },
+  {
+    "key": "jwt",
+    "label": "JWT",
+    "aliases": []
+  },
+  {
+    "key": "kafka",
+    "label": "Kafka",
+    "aliases": [
+      "Apache Kafka"
+    ]
+  },
+  {
+    "key": "kotlin",
+    "label": "Kotlin",
+    "aliases": []
+  },
+  {
+    "key": "kubernetes",
+    "label": "Kubernetes",
+    "aliases": [
+      "K8s"
+    ]
+  },
+  {
+    "key": "langchain",
+    "label": "LangChain",
+    "aliases": []
+  },
+  {
+    "key": "laravel",
+    "label": "Laravel",
+    "aliases": []
+  },
+  {
+    "key": "linux",
+    "label": "Linux",
+    "aliases": []
+  },
+  {
+    "key": "llm",
+    "label": "LLM",
+    "aliases": [
+      "Large Language Models"
+    ]
+  },
+  {
+    "key": "machine-learning",
+    "label": "Machine Learning",
+    "aliases": []
+  },
+  {
+    "key": "macos",
+    "label": "macOS",
+    "aliases": []
+  },
+  {
+    "key": "mariadb",
+    "label": "MariaDB",
+    "aliases": []
+  },
+  {
+    "key": "matplotlib",
+    "label": "Matplotlib",
+    "aliases": []
+  },
+  {
+    "key": "mes",
+    "label": "MES",
+    "aliases": []
+  },
+  {
+    "key": "microservices",
+    "label": "Microservices",
+    "aliases": []
+  },
+  {
+    "key": "microsoft365",
+    "label": "Microsoft 365",
+    "aliases": [
+      "Office 365"
+    ]
+  },
+  {
+    "key": "mongodb",
+    "label": "MongoDB",
+    "aliases": []
+  },
+  {
+    "key": "mvc",
+    "label": "MVC",
+    "aliases": []
+  },
+  {
+    "key": "mysql",
+    "label": "MySQL",
+    "aliases": []
+  },
+  {
+    "key": "negotiation",
+    "label": "Đàm phán",
+    "aliases": [
+      "Kỹ năng đàm phán"
+    ]
+  },
+  {
+    "key": "nestjs",
+    "label": "NestJS",
+    "aliases": [
+      "Nest.js"
+    ]
+  },
+  {
+    "key": "network-admin",
+    "label": "Quản trị mạng",
+    "aliases": []
+  },
+  {
+    "key": "nextjs",
+    "label": "Next.js",
+    "aliases": [
+      "NextJS"
+    ]
+  },
+  {
+    "key": "nginx",
+    "label": "Nginx",
+    "aliases": []
+  },
+  {
+    "key": "nodejs",
+    "label": "Node.js",
+    "aliases": [
+      "NodeJS",
+      "Node JS"
+    ]
+  },
+  {
+    "key": "nosql",
+    "label": "NoSQL",
+    "aliases": []
+  },
+  {
+    "key": "numpy",
+    "label": "NumPy",
+    "aliases": []
+  },
+  {
+    "key": "oauth2",
+    "label": "OAuth2",
+    "aliases": [
+      "OAuth 2.0"
+    ]
+  },
+  {
+    "key": "odoo",
+    "label": "Odoo",
+    "aliases": []
+  },
+  {
+    "key": "office-skills",
+    "label": "Tin học văn phòng",
+    "aliases": []
+  },
+  {
+    "key": "oop",
+    "label": "OOP",
+    "aliases": [
+      "Object Oriented Programming"
+    ]
+  },
+  {
+    "key": "opensearch",
+    "label": "OpenSearch",
+    "aliases": []
+  },
+  {
+    "key": "oracle",
+    "label": "Oracle",
+    "aliases": []
+  },
+  {
+    "key": "owasp-top10",
+    "label": "OWASP Top 10",
+    "aliases": []
+  },
+  {
+    "key": "pandas",
+    "label": "Pandas",
+    "aliases": []
+  },
+  {
+    "key": "persuasion",
+    "label": "Thuyết phục",
+    "aliases": [
+      "Kỹ năng thuyết phục"
+    ]
+  },
+  {
+    "key": "photoshop",
+    "label": "Adobe Photoshop",
+    "aliases": [
+      "Photoshop"
+    ]
+  },
+  {
+    "key": "php",
+    "label": "PHP",
+    "aliases": []
+  },
+  {
+    "key": "planning",
+    "label": "Lập kế hoạch",
+    "aliases": []
+  },
+  {
+    "key": "playwright",
+    "label": "Playwright",
+    "aliases": []
+  },
+  {
+    "key": "postgresql",
+    "label": "PostgreSQL",
+    "aliases": [
+      "Postgres"
+    ]
+  },
+  {
+    "key": "postman",
+    "label": "Postman",
+    "aliases": []
+  },
+  {
+    "key": "power-automate",
+    "label": "Power Automate",
+    "aliases": []
+  },
+  {
+    "key": "powerbi",
+    "label": "Power BI",
+    "aliases": [
+      "Microsoft Power BI"
+    ]
+  },
+  {
+    "key": "powerpoint",
+    "label": "PowerPoint",
+    "aliases": [
+      "Microsoft PowerPoint"
+    ]
+  },
+  {
+    "key": "powershell",
+    "label": "PowerShell",
+    "aliases": []
+  },
+  {
+    "key": "premiere-pro",
+    "label": "Adobe Premiere Pro",
+    "aliases": [
+      "Premiere Pro",
+      "Premiere"
+    ]
+  },
+  {
+    "key": "presentation",
+    "label": "Thuyết trình",
+    "aliases": [
+      "Kỹ năng thuyết trình"
+    ]
+  },
+  {
+    "key": "product-management",
+    "label": "Product Management",
+    "aliases": []
+  },
+  {
+    "key": "project-management",
+    "label": "Quản lý dự án",
+    "aliases": [
+      "Project Management"
+    ]
+  },
+  {
+    "key": "prometheus",
+    "label": "Prometheus",
+    "aliases": []
+  },
+  {
+    "key": "pytest",
+    "label": "pytest",
+    "aliases": []
+  },
+  {
+    "key": "python",
+    "label": "Python",
+    "aliases": []
+  },
+  {
+    "key": "pytorch",
+    "label": "PyTorch",
+    "aliases": []
+  },
+  {
+    "key": "rabbitmq",
+    "label": "RabbitMQ",
+    "aliases": []
+  },
+  {
+    "key": "rag",
+    "label": "RAG",
+    "aliases": [
+      "Retrieval Augmented Generation"
+    ]
+  },
+  {
+    "key": "rails",
+    "label": "Ruby on Rails",
+    "aliases": [
+      "Rails"
+    ]
+  },
+  {
+    "key": "react",
+    "label": "React",
+    "aliases": [
+      "ReactJS",
+      "React.js"
+    ]
+  },
+  {
+    "key": "react-native",
+    "label": "React Native",
+    "aliases": []
+  },
+  {
+    "key": "redis",
+    "label": "Redis",
+    "aliases": []
+  },
+  {
+    "key": "rest-api",
+    "label": "REST API",
+    "aliases": [
+      "RESTful API"
+    ]
+  },
+  {
+    "key": "revit",
+    "label": "Revit",
+    "aliases": []
+  },
+  {
+    "key": "routing",
+    "label": "Routing",
+    "aliases": []
+  },
+  {
+    "key": "ruby",
+    "label": "Ruby",
+    "aliases": []
+  },
+  {
+    "key": "rust",
+    "label": "Rust",
+    "aliases": []
+  },
+  {
+    "key": "saas",
+    "label": "SaaS",
+    "aliases": []
+  },
+  {
+    "key": "sales",
+    "label": "Sales",
+    "aliases": [
+      "Bán hàng"
+    ]
+  },
+  {
+    "key": "salesforce",
+    "label": "Salesforce",
+    "aliases": []
+  },
+  {
+    "key": "sap",
+    "label": "SAP",
+    "aliases": []
+  },
+  {
+    "key": "sap-erp",
+    "label": "SAP ERP",
+    "aliases": []
+  },
+  {
+    "key": "sass",
+    "label": "Sass",
+    "aliases": [
+      "SCSS"
+    ]
+  },
+  {
+    "key": "scikit-learn",
+    "label": "scikit-learn",
+    "aliases": [
+      "sklearn"
+    ]
+  },
+  {
+    "key": "scrum",
+    "label": "Scrum",
+    "aliases": []
+  },
+  {
+    "key": "sdlc",
+    "label": "SDLC",
+    "aliases": []
+  },
+  {
+    "key": "selenium",
+    "label": "Selenium",
+    "aliases": []
+  },
+  {
+    "key": "selenium-webdriver",
+    "label": "Selenium WebDriver",
+    "aliases": []
+  },
+  {
+    "key": "sem",
+    "label": "SEM",
+    "aliases": []
+  },
+  {
+    "key": "seo",
+    "label": "SEO",
+    "aliases": []
+  },
+  {
+    "key": "siem",
+    "label": "SIEM",
+    "aliases": []
+  },
+  {
+    "key": "snowflake",
+    "label": "Snowflake",
+    "aliases": []
+  },
+  {
+    "key": "solid",
+    "label": "SOLID",
+    "aliases": []
+  },
+  {
+    "key": "solidworks",
+    "label": "SolidWorks",
+    "aliases": []
+  },
+  {
+    "key": "spark",
+    "label": "Apache Spark",
+    "aliases": [
+      "Spark"
+    ]
+  },
+  {
+    "key": "spring",
+    "label": "Spring",
+    "aliases": []
+  },
+  {
+    "key": "spring-boot",
+    "label": "Spring Boot",
+    "aliases": [
+      "SpringBoot"
+    ]
+  },
+  {
+    "key": "spring-security",
+    "label": "Spring Security",
+    "aliases": []
+  },
+  {
+    "key": "sql",
+    "label": "SQL",
+    "aliases": []
+  },
+  {
+    "key": "sqlite",
+    "label": "SQLite",
+    "aliases": []
+  },
+  {
+    "key": "sqlserver",
+    "label": "SQL Server",
+    "aliases": [
+      "Microsoft SQL Server",
+      "MSSQL"
+    ]
+  },
+  {
+    "key": "srs",
+    "label": "SRS",
+    "aliases": []
+  },
+  {
+    "key": "stlc",
+    "label": "STLC",
+    "aliases": []
+  },
+  {
+    "key": "swift",
+    "label": "Swift",
+    "aliases": []
+  },
+  {
+    "key": "tableau",
+    "label": "Tableau",
+    "aliases": []
+  },
+  {
+    "key": "tailwind",
+    "label": "Tailwind CSS",
+    "aliases": [
+      "TailwindCSS"
+    ]
+  },
+  {
+    "key": "tcpip",
+    "label": "TCP/IP",
+    "aliases": []
+  },
+  {
+    "key": "teamwork",
+    "label": "Làm việc nhóm",
+    "aliases": [
+      "Kỹ năng làm việc nhóm"
+    ]
+  },
+  {
+    "key": "tensorflow",
+    "label": "TensorFlow",
+    "aliases": []
+  },
+  {
+    "key": "terraform",
+    "label": "Terraform",
+    "aliases": []
+  },
+  {
+    "key": "trello",
+    "label": "Trello",
+    "aliases": []
+  },
+  {
+    "key": "typescript",
+    "label": "TypeScript",
+    "aliases": [
+      "TS"
+    ]
+  },
+  {
+    "key": "typography",
+    "label": "Typography",
+    "aliases": []
+  },
+  {
+    "key": "uat",
+    "label": "UAT",
+    "aliases": []
+  },
+  {
+    "key": "uml",
+    "label": "UML",
+    "aliases": []
+  },
+  {
+    "key": "unity",
+    "label": "Unity",
+    "aliases": []
+  },
+  {
+    "key": "use-case",
+    "label": "Use case",
+    "aliases": []
+  },
+  {
+    "key": "user-story",
+    "label": "User Story",
+    "aliases": []
+  },
+  {
+    "key": "visio",
+    "label": "Visio",
+    "aliases": []
+  },
+  {
+    "key": "vlan",
+    "label": "VLAN",
+    "aliases": []
+  },
+  {
+    "key": "vue",
+    "label": "Vue.js",
+    "aliases": [
+      "VueJS",
+      "Vue"
+    ]
+  },
+  {
+    "key": "websocket",
+    "label": "WebSocket",
+    "aliases": []
+  },
+  {
+    "key": "windows",
+    "label": "Windows",
+    "aliases": []
+  },
+  {
+    "key": "windows-server",
+    "label": "Windows Server",
+    "aliases": []
+  },
+  {
+    "key": "wireframe",
+    "label": "Wireframe",
+    "aliases": []
+  },
+  {
+    "key": "word",
+    "label": "Word",
+    "aliases": [
+      "Microsoft Word"
+    ]
+  }
+]

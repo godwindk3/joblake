@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import requests
 
-from joblake.enrichment.schema import PROMPT, SCHEMA, input_text
+from joblake.enrichment.schema import PROMPT, SCHEMA, input_text, batch_contract
 
 
 class ProviderError(Exception):
@@ -19,18 +19,25 @@ class ProviderError(Exception):
 class Result:
     data: dict
     tokens: int | None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
-def request_body(provider, payload, max_output):
+def request_body(provider, payload, max_output, *, batch=False):
+    prompt, schema = PROMPT, SCHEMA
+    if batch:
+        if provider['name'] != 'gemini':
+            raise ValueError('Batch extraction is only enabled for Gemini')
+        prompt, schema, payload = batch_contract(payload)
     text = input_text(payload)
     if provider['name'] == 'gemini':
         return {
-            'systemInstruction': {'parts': [{'text': PROMPT}]},
+            'systemInstruction': {'parts': [{'text': prompt}]},
             'contents': [{'role': 'user', 'parts': [{'text': text}]}],
             'generationConfig': {
                 'maxOutputTokens': max_output,
                 'thinkingConfig': {'thinkingLevel': 'minimal'},
-                'responseMimeType': 'application/json', 'responseJsonSchema': SCHEMA,
+                'responseMimeType': 'application/json', 'responseJsonSchema': schema,
             },
         }
     body = {
@@ -56,10 +63,10 @@ def request_body(provider, payload, max_output):
     return body
 
 
-def extract(provider, payload, *, max_output=2048, timeout=60):
+def extract(provider, payload, *, max_output=2048, timeout=60, batch=False):
     name, model = provider['name'], provider['model']
     key = os.environ[provider['key_env']]
-    body = request_body(provider, payload, max_output)
+    body = request_body(provider, payload, max_output, batch=batch)
     headers = {'Content-Type': 'application/json'}
     if name == 'gemini':
         url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
@@ -110,14 +117,26 @@ def extract(provider, payload, *, max_output=2048, timeout=60):
                 raise ProviderError('incomplete_output', 0)
             content = ''.join(p['text'] for p in candidate['content']['parts']
                               if 'text' in p and not p.get('thought'))
-            tokens = raw.get('usageMetadata', {}).get('totalTokenCount')
+            usage = raw.get('usageMetadata', {})
+            tokens = usage.get('totalTokenCount')
+            inputs = usage.get('promptTokenCount')
+            outputs = usage.get('candidatesTokenCount')
+            if type(outputs) is int:
+                outputs += usage.get('thoughtsTokenCount', 0) or 0
         else:
             choice = raw['choices'][0]
             if choice.get('finish_reason') != 'stop' or choice['message'].get('refusal'):
                 raise ProviderError('incomplete_output', 0)
             content = choice['message']['content']
-            tokens = raw.get('usage', {}).get('total_tokens')
+            usage = raw.get('usage', {})
+            tokens = usage.get('total_tokens')
+            inputs, outputs = usage.get('prompt_tokens'), usage.get('completion_tokens')
         data = json.loads(content)
-        return Result(data, tokens if type(tokens) is int and tokens >= 0 else None)
+        clean = lambda value: value if type(value) is int and value >= 0 else None
+        return Result(data, clean(tokens), clean(inputs), clean(outputs))
     except (ValueError, KeyError, IndexError, TypeError, AttributeError):
         raise ProviderError('invalid_response', 0) from None
+
+
+def extract_batch(provider, jobs, *, max_output=6144, timeout=60):
+    return extract(provider, jobs, max_output=max_output, timeout=timeout, batch=True)

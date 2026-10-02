@@ -1,6 +1,6 @@
 # Airflow local setup
 
-Runtime dùng chung cho 13 DAG: chín nguồn, sync, enrichment, data health và raw cleanup. Xem [vận hành các source](../operations/airflow-sources.md) để biết retry, pool, giới hạn và cách trigger.
+Runtime dùng chung cho 14 DAG: chín nguồn, sync, enrichment, enrichment backfill, data health và raw cleanup. Xem [vận hành các source](../operations/airflow-sources.md) để biết retry, pool, giới hạn và cách trigger.
 
 ## Chuẩn bị và chạy
 
@@ -71,7 +71,7 @@ Clear task không bỏ qua `next_retry_at` hoặc giới hạn attempts. Một t
 công không có nghĩa toàn bộ backlog đã hết (có thể còn URL đang chờ retry).
 Record exhausted cần được xử lý theo state/parser policy, không chỉ Clear DAG.
 
-Chín source DAG, sync và enrichment không có lịch tự động. Data health có lịch
+Chín source DAG, sync, enrichment và enrichment backfill không có lịch tự động. Data health có lịch
 07:00 và raw cleanup 15:00 Asia/Ho_Chi_Minh, nhưng mặc định paused; unpause mới
 kích hoạt lịch. Schedule, pool và Airflow retries nằm trong DAG, không nằm trong
 YAML crawler. Raw cleanup vẫn dry-run khi unpause nếu chưa đổi mặc định `apply`.
@@ -94,6 +94,9 @@ chính sách parse lỗi và cách kiểm tra. Không chạy legacy `supabase-mi
 
 - `joblake_enrichment`: chạy thủ công, mặc định `dry_run=true`; queue riêng quản
   lý retry/quota, không tự chạy sau parse. Xem [enrichment](../operations/enrichment.md).
+- `joblake_enrichment_backfill`: chạy bù job cũ còn active, mặc định dry run,
+  30 ngày gần nhất theo `first_seen_at`, mới nhất trước, tối đa 100 job/lượt.
+  Có bộ lọc ngày/nguồn/ID; xem [hướng dẫn backfill](../operations/enrichment-backfill.md).
 - `joblake_data_health`: `generate_report -> check_quality`. Report JSON/Markdown
   được lưu trước; check quality không retry, trả lỗi khi vượt ngưỡng. Generation
   vẫn retry lỗi DB/file hai lần. `configs/data_health.yaml` cho phép override theo
