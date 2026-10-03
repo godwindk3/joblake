@@ -8,6 +8,7 @@ request_timeout_seconds: 60
 calibrate_input_tokens: true # Learns from >=20 measured requests; reserves full output cap.
 providers:
   - name: gemini
+    enforce_daily_budget: false # Let API 429 determine daily exhaustion; retain minute pacing.
     model: gemini-3.1-flash-lite
     key_env: GEMINI_API_KEY
     batch_size: 1 # Set to 3 after the paired benchmark passes.
@@ -17,6 +18,7 @@ providers:
     requests_per_day: 400
     tokens_per_day: 2000000
   - name: groq
+    enforce_daily_budget: false # Shared by regular enrichment and backfill.
     model: openai/gpt-oss-120b
     key_env: GROQ_API_KEY
     requests_per_minute: 24

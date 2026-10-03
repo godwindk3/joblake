@@ -65,6 +65,11 @@ Yêu cầu `date_from < date_to <= as_of`. Nếu chỉ nhập `date_to`, cửa s
   là mức so sánh nếu chạy từng job. Đây là ước tính khi provider đó xử lý toàn bộ
   tập chọn; cooldown/quota còn lại có thể khiến nhóm thực tế thu nhỏ hoặc đổi provider.
 
+Gemini/Groq hiện dùng `enforce_daily_budget=false`: không chặn theo ngân sách
+24 giờ local, chờ API trả 429 rồi cooldown. Report vẫn có `used_requests_24h` và
+`used_tokens_24h`; các trường `remaining_*_24h` là null (không phải quota API vô hạn).
+Giới hạn theo phút, số request và thời gian mỗi run vẫn được giữ nguyên.
+
 Ước tính token cho từng provider là giả định provider đó xử lý cả nhóm, không
 cộng các provider lại thành nhu cầu thực tế. Quota là ledger local, không phải
 quota tài khoản đọc trực tiếp từ nhà cung cấp. Model có thể trả 429 sớm hơn.

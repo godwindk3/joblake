@@ -39,6 +39,7 @@ See the [operational runbook](docs/operations/runbook.md) for publishing and rec
 - [Documentation index](docs/README.md)
 - [Current architecture](docs/architecture/overview.md)
 - [Airflow setup](docs/setup/airflow.md)
+- [Standalone Docker](docs/setup/standalone.md): automatic pipeline with three concurrent sources, without Airflow.
 - [Devwork source and validation](docs/operations/devwork.md)
 - [CareerViet source and validation](docs/operations/careerviet.md)
 - [Vieclam24h source and validation](docs/operations/vieclam24h.md)
@@ -61,6 +62,7 @@ See the [operational runbook](docs/operations/runbook.md) for publishing and rec
 | supabase/migrations/ | Additive serving migrations; not a complete bootstrap |
 | .github/workflows/ | Unit, PostgreSQL integration and Airflow image CI |
 | orchestration/airflow/ | Airflow image, Compose and DAGs |
+| orchestration/standalone/ | Lightweight Docker image and runner configuration |
 | scripts/ | Operational utilities |
 | tests/ | Automated tests and manual checks |
 | docs/ | Setup, architecture, development, operation and history |

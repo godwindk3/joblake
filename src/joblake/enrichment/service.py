@@ -12,7 +12,7 @@ import yaml
 
 from joblake.enrichment.providers import ProviderError, extract, extract_batch
 from joblake.enrichment.schema import PROMPT, SCHEMA, input_text, validate, batch_contract, validate_batch
-from joblake.enrichment.store import Store
+from joblake.enrichment.store import Store, request_token_limit
 
 LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +36,8 @@ def load_config(path):
         seen.add(p['name'])
         if type(p.get('enabled', True)) is not bool:
             raise ValueError('Invalid provider enabled flag')
+        if type(p.get('enforce_daily_budget', True)) is not bool:
+            raise ValueError('Invalid provider enforce_daily_budget flag')
         if not isinstance(p['model'], str) or not p['model'] or not isinstance(p['key_env'], str):
             raise ValueError('Invalid provider model/key_env')
         for field in ('requests_per_minute', 'tokens_per_minute', 'requests_per_day', 'tokens_per_day'):
@@ -82,7 +84,7 @@ def group_jobs(head, followers, provider, output_per_job, *, ratio=0.5):
         total = estimate_tokens(proposed, output, ratio=ratio, batch=True)
         if total - output > provider.get('batch_max_input_tokens', 12000):
             break
-        if total > min(provider['tokens_per_minute'], provider['tokens_per_day']):
+        if total > request_token_limit(provider):
             break
         selected = proposed
     return selected
@@ -94,9 +96,9 @@ def process(store, config, *, call=extract, batch_call=extract_batch, clock=time
         LOGGER.error('No enrichment API keys configured; queue retained, sync remains independent')
         return 2
     for p in config['providers']:
-        LOGGER.info('Provider %s model=%s configured=%s enabled=%s budget_rpd=%s budget_tpd=%s',
+        LOGGER.info('Provider %s model=%s configured=%s enabled=%s budget_rpd=%s budget_tpd=%s enforce_daily_budget=%s',
                     p['name'], p['model'], bool(os.getenv(p['key_env'])), p.get('enabled', True),
-                    p['requests_per_day'], p['tokens_per_day'])
+                    p['requests_per_day'], p['tokens_per_day'], p.get('enforce_daily_budget', True))
     deadline = clock() + config['max_run_seconds']
     attempted = attempted_jobs = succeeded = errors = 0
     ratios = {}
@@ -112,7 +114,7 @@ def process(store, config, *, call=extract, batch_call=extract_batch, clock=time
         estimates = {p['name']: estimate_tokens(job['input_payload'],
                      p.get('max_output_tokens', config['max_output_tokens']), ratio=ratios[p['name'], False]) for p in providers}
         # Oversized inputs remain visible for manual review; never silently truncate JD.
-        if all(estimates[p['name']] > min(p['tokens_per_minute'], p['tokens_per_day']) for p in providers):
+        if all(estimates[p['name']] > request_token_limit(p) for p in providers):
             store.c.execute("""UPDATE core.job_enrichments SET status='failed',
                 error_code='input_exceeds_budget',updated_at=now() WHERE id=%s""", (job['id'],))
             errors += 1

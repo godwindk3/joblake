@@ -82,6 +82,19 @@ class EnrichmentTests(unittest.TestCase):
             with self.assertRaisesRegex(ProviderError, 'incomplete_output'):
                 extract(provider, self.payload)
 
+    def test_api_429_daily_limit_and_retry_after_keep_cooldown(self):
+        provider = self.config['providers'][1]
+        for message, retry_after, expected in [('daily token limit', '10', 86400),
+                                                ('rate limit', '7200', 7200)]:
+            with self.subTest(message=message):
+                response = MagicMock(status_code=429, headers={'Retry-After': retry_after})
+                response.json.return_value = {'error': {'message': message}}
+                with patch.dict(os.environ, {provider['key_env']: 'test'}), patch('requests.post', return_value=response):
+                    with self.assertRaises(ProviderError) as caught:
+                        extract(provider, self.payload)
+                self.assertEqual(caught.exception.code, 'http_429')
+                self.assertEqual(caught.exception.cooldown, expected)
+
     def test_openrouter_embedded_error_uses_provider_cooldown(self):
         provider = self.config['providers'][2]
         response = MagicMock(status_code=200)

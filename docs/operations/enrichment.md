@@ -68,9 +68,16 @@ single-job requests. See [batching and its verification](enrichment-batches.md).
 The run limit counts API requests; one grouped request can attempt up to three
 jobs. Backfill's distinct `max_jobs` limit still bounds the selected job set.
 
+Gemini and Groq now set `enforce_daily_budget: false`: the worker does not stop
+at the local rolling daily request/token thresholds; provider HTTP 429 determines
+exhaustion and applies the existing cooldown. Minute pacing, per-run request/time
+limits, retries, and the shared session lock remain enforced. Omit the flag or
+set it to `true` to enforce the configured daily budgets again. This applies to
+both normal enrichment and backfill; no provider quota is increased by this flag.
+
 Budgets in YAML deliberately leave headroom below the user's displayed limits.
 Request/token reservations persist in PostgreSQL and include failures. Daily
-budgets use a conservative rolling 24-hour window, minute budgets use a rolling
+budgets (when enforced) use a conservative rolling 24-hour window, minute budgets use a rolling
 60-second window. Actual usage replaces reservations when available; interrupted
 or uncertain calls retain reservations. Token reservations are estimates, not
 provider token counts. API 429 remains authoritative. Other clients sharing the

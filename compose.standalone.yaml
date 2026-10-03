@@ -1,0 +1,91 @@
+name: joblake-standalone
+
+x-logging: &logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-runtime: &runtime
+  image: joblake-standalone:local
+  build:
+    context: .
+    dockerfile: orchestration/standalone/Dockerfile
+  init: true
+  env_file: ${JOBLAKE_ENV_FILE:-.env}
+  environment:
+    POSTGRES_HOST: postgres
+    POSTGRES_PORT: "5432"
+    POSTGRES_DB: ${POSTGRES_DB:-joblake}
+    POSTGRES_USER: ${POSTGRES_USER:-joblake}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    # The runner derives LOCAL_DATABASE_URL from these same POSTGRES_* values.
+    LOCAL_DATABASE_URL: ""
+    MINIO_ENDPOINT: minio:9000
+    MINIO_SECURE: "false"
+  volumes:
+    - ./configs:/opt/joblake/configs:ro
+    - ./orchestration/standalone/config.yaml:/opt/joblake/orchestration/standalone/config.yaml:ro
+    - runner_data:/opt/joblake/data
+    - runner_output:/opt/joblake/output
+  shm_size: "1gb"
+  stop_grace_period: 45s
+  logging: *logging
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-joblake}
+      POSTGRES_USER: ${POSTGRES_USER:-joblake}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    logging: *logging
+
+  minio:
+    image: quay.io/minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY in .env}
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+    logging: *logging
+
+  joblake-init:
+    <<: *runtime
+    command: ["init"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    restart: "no"
+
+  joblake-runner:
+    <<: *runtime
+    command: ["schedule"]
+    depends_on:
+      joblake-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "joblake.standalone", "status", "--heartbeat"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+volumes:
+  postgres_data:
+  minio_data:
+  runner_data:
+  runner_output:

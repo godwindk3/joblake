@@ -9,6 +9,13 @@ from joblake.enrichment.schema import VERSION
 from joblake.enrichment.candidates import CURRENT_CONTENT
 
 
+def request_token_limit(provider):
+    """Keep minute pacing even when the API owns the daily limit."""
+    if not provider.get('enforce_daily_budget', True):
+        return provider['tokens_per_minute']
+    return min(provider['tokens_per_minute'], provider['tokens_per_day'])
+
+
 class Store:
     def __init__(self, connection, *, candidates=None, ordered_selection=False):
         self.c = connection
@@ -116,8 +123,10 @@ class Store:
                 FROM core.enrichment_attempts WHERE provider=%s
                     AND started_at > now()-interval '24 hours'""", (provider['name'],)).fetchone()
             rpd, tpd, rpm, tpm = counts
-            if (rpd >= provider['requests_per_day'] or tpd + tokens > provider['tokens_per_day']
-                    or rpm >= provider['requests_per_minute'] or tpm + tokens > provider['tokens_per_minute']):
+            daily_exhausted = provider.get('enforce_daily_budget', True) and (
+                rpd >= provider['requests_per_day'] or tpd + tokens > provider['tokens_per_day'])
+            if (daily_exhausted or rpm >= provider['requests_per_minute']
+                    or tpm + tokens > provider['tokens_per_minute']):
                 return None
             if purpose == 'production':
                 # Check every member before writing anything; a stale group consumes no quota.
@@ -183,12 +192,14 @@ class Store:
     def can_retry_soon(self, providers, tokens):
         """Don't hold an Airflow slot for a daily quota or a long provider outage."""
         for p in providers:
-            if tokens > min(p['tokens_per_minute'], p['tokens_per_day']):
+            if tokens > request_token_limit(p):
                 continue
             blocked = self.c.execute("""SELECT blocked_until > now()+interval '60 seconds'
                 FROM core.enrichment_provider_state WHERE provider=%s""", (p['name'],)).fetchone()
             if blocked and blocked[0]:
                 continue
+            if not p.get('enforce_daily_budget', True):
+                return True
             requests, used = self.c.execute("""SELECT count(*),
                 coalesce(sum(coalesce(actual_tokens,reserved_tokens)),0)
                 FROM core.enrichment_attempts WHERE provider=%s
