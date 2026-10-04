@@ -1,7 +1,7 @@
 # Normal enrichment cutoff. Explicit enrich-backfill uses its own date filters.
 eligible_from: '2026-09-26T00:00:00+07:00'
 max_jobs_per_run: 100
-max_run_seconds: 1200
+max_run_seconds: 7200 # Both Airflow enrichment tasks use this budget + 5 minutes as their timeout.
 max_attempts: 3
 max_output_tokens: 2048
 request_timeout_seconds: 60

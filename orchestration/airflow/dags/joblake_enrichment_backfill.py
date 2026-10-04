@@ -1,9 +1,8 @@
 """Manual historical enrichment; preview by default, shared production quota ledger."""
-from datetime import timedelta
-
 import pendulum
 from airflow.sdk import DAG, Param
 from airflow.providers.standard.operators.bash import BashOperator
+from joblake_dag_config import enrichment_execution_timeout
 
 
 with DAG(
@@ -45,7 +44,7 @@ with DAG(
         cwd='/opt/joblake',
         pool='joblake_serial',
         retries=0,
-        execution_timeout=timedelta(minutes=25),
+        execution_timeout=enrichment_execution_timeout(),
         # Pass user parameters as data, never interpolate them into shell source.
         env={'JOBLAKE_BACKFILL_OPTIONS': '{{ params | tojson }}'},
         append_env=True,

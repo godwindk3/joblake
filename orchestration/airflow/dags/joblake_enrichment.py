@@ -1,9 +1,8 @@
 """Standalone optional AI enrichment. No dependency on ingestion or serving sync."""
-from datetime import timedelta
-
 import pendulum
 from airflow.sdk import DAG, Param
 from airflow.providers.standard.operators.bash import BashOperator
+from joblake_dag_config import enrichment_execution_timeout
 
 
 with DAG(
@@ -27,7 +26,7 @@ with DAG(
         cwd='/opt/joblake',
         pool='joblake_serial',
         retries=0,  # Persistent queue owns retry timing and budgets, not Airflow.
-        execution_timeout=timedelta(minutes=25),
+        execution_timeout=enrichment_execution_timeout(),
         bash_command=(
             'exec /opt/joblake/venv/bin/python -u -m joblake.main --phase enrich '
             '--max-jobs {{ params.max_jobs | int }} '

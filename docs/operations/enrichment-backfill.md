@@ -15,7 +15,11 @@ loại khỏi DAG enrichment thông thường. Chỉ chọn bản parse hiện t
 5. Chạy `joblake_supabase_sync` riêng để đưa kết quả thành công lên serving.
 
 DAG chạy thủ công, không tự chạy lại ngày hôm sau. Giới hạn thời gian dùng chung
-config enrichment (mặc định 20 phút, timeout task 25 phút). Không tự retry task;
+config enrichment: `max_run_seconds` trong `configs/enrichment.yaml` (mặc định
+1200 giây). Timeout task tự tính bằng giá trị này cộng 5 phút cho cả hai DAG;
+không cần sửa file Python khi tăng thời gian. Sau khi sửa YAML, chờ Airflow parse
+lại DAG và kiểm tra timeout mới trước khi trigger. Run đang chạy giữ cấu hình cũ.
+Giới hạn `max_jobs` và `max_api_attempts` vẫn áp dụng độc lập. Không tự retry task;
 queue giữ lịch sử retry. Hết quota thì giữ công việc trong queue để lần sau chạy tiếp.
 
 ## Tham số

@@ -25,8 +25,15 @@ Keys, complete prompts and raw provider error responses are not logged. The CLI
 runs with `-u`, so log output is not buffered. Times in logs are UTC.
 
 The DAG is manual (`schedule=None`), with one active run and no automatic Airflow
-retries. The persistent queue owns retries. It runs for at most 20 minutes plus
-the final request (Airflow timeout: 25 minutes). A pending daily quota causes an
+retries. The persistent queue owns retries. Its processing budget is
+`max_run_seconds` in `configs/enrichment.yaml` (default 1200 seconds), plus the
+final request. Both enrichment DAGs derive their Airflow task timeout from that
+same setting plus 5 minutes; no DAG source edit is needed. For example, 14400
+seconds gives a 4-hour processing budget and a 4-hour-5-minute task timeout.
+After editing the mounted YAML, wait for Airflow to reparse the DAG and confirm
+the new task timeout before triggering a new run. Running tasks keep their
+existing settings. The job/request limits still apply independently.
+A pending daily quota causes an
 early exit. Trigger the DAG again later to resume. There is no automatic wakeup.
 The independent `joblake_supabase_sync` DAG is unchanged.
 

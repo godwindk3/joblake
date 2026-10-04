@@ -96,6 +96,8 @@ jobs:
           docker run --rm --entrypoint python
           -e AIRFLOW__CORE__LOAD_EXAMPLES=False
           -v "$GITHUB_WORKSPACE/orchestration/airflow/dags:/opt/airflow/dags:ro"
+          -v "$GITHUB_WORKSPACE/orchestration/airflow/config:/opt/airflow/config:ro"
+          -v "$GITHUB_WORKSPACE/configs:/opt/joblake/configs:ro"
           -v "$GITHUB_WORKSPACE/orchestration/airflow/check_dag.py:/opt/airflow/check_dag.py:ro"
           joblake-airflow:ci /opt/airflow/check_dag.py
 
