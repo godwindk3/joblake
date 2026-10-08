@@ -25,8 +25,15 @@ Keys, complete prompts and raw provider error responses are not logged. The CLI
 runs with `-u`, so log output is not buffered. Times in logs are UTC.
 
 The DAG is manual (`schedule=None`), with one active run and no automatic Airflow
-retries. The persistent queue owns retries. It runs for at most 20 minutes plus
-the final request (Airflow timeout: 25 minutes). A pending daily quota causes an
+retries. The persistent queue owns retries. Its processing budget is
+`max_run_seconds` in `configs/enrichment.yaml` (default 1200 seconds), plus the
+final request. Both enrichment DAGs derive their Airflow task timeout from that
+same setting plus 5 minutes; no DAG source edit is needed. For example, 14400
+seconds gives a 4-hour processing budget and a 4-hour-5-minute task timeout.
+After editing the mounted YAML, wait for Airflow to reparse the DAG and confirm
+the new task timeout before triggering a new run. Running tasks keep their
+existing settings. The job/request limits still apply independently.
+A pending daily quota causes an
 early exit. Trigger the DAG again later to resume. There is no automatic wakeup.
 The independent `joblake_supabase_sync` DAG is unchanged.
 
@@ -68,9 +75,16 @@ single-job requests. See [batching and its verification](enrichment-batches.md).
 The run limit counts API requests; one grouped request can attempt up to three
 jobs. Backfill's distinct `max_jobs` limit still bounds the selected job set.
 
+Gemini and Groq now set `enforce_daily_budget: false`: the worker does not stop
+at the local rolling daily request/token thresholds; provider HTTP 429 determines
+exhaustion and applies the existing cooldown. Minute pacing, per-run request/time
+limits, retries, and the shared session lock remain enforced. Omit the flag or
+set it to `true` to enforce the configured daily budgets again. This applies to
+both normal enrichment and backfill; no provider quota is increased by this flag.
+
 Budgets in YAML deliberately leave headroom below the user's displayed limits.
 Request/token reservations persist in PostgreSQL and include failures. Daily
-budgets use a conservative rolling 24-hour window, minute budgets use a rolling
+budgets (when enforced) use a conservative rolling 24-hour window, minute budgets use a rolling
 60-second window. Actual usage replaces reservations when available; interrupted
 or uncertain calls retain reservations. Token reservations are estimates, not
 provider token counts. API 429 remains authoritative. Other clients sharing the

@@ -18,6 +18,11 @@ Database integration tests are opt-in. Read their environment requirements and u
 - PostgreSQL 16 service with disposable credentials, full Alembic upgrade, CDC,
   serving/search and enrichment integration tests, and real data-health queries.
 - Build the production Airflow Dockerfile and import/check all DAGs in that image.
+- Build standalone Docker and exercise migrations, headful browser launch, the
+  empty-database health gate, scheduler resume/heartbeat, locking and shutdown in
+  an isolated Compose project (`python scripts/check_standalone.py`). The script
+  removes only its unique temporary project's volumes and makes no live crawl,
+  enrichment or serving-sync requests.
 
 The PostgreSQL job needs no repository secrets and never connects to Supabase.
 Tests create uniquely named temporary databases and remove them afterward.

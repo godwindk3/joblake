@@ -14,7 +14,7 @@ from psycopg.types.json import Jsonb
 from joblake.enrichment.candidates import CURRENT_CONTENT
 from joblake.enrichment.schema import VERSION
 from joblake.enrichment.service import estimate_tokens, group_jobs, load_config, process
-from joblake.enrichment.store import Store
+from joblake.enrichment.store import Store, request_token_limit
 
 LOGGER = logging.getLogger(__name__)
 VIETNAM = timezone(timedelta(hours=7))
@@ -144,15 +144,18 @@ def preview(connection, options, config):
             used_ids = {row['id'] for row in group}
             remaining = [row for row in remaining if row['id'] not in used_ids]
         providers.append(dict(provider=provider['name'], key_configured=bool(os.getenv(provider['key_env'])),
-                              remaining_requests_24h=max(0, provider['requests_per_day'] - usage[0]),
-                              remaining_tokens_24h=max(0, provider['tokens_per_day'] - usage[1]),
+                              enforce_daily_budget=provider.get('enforce_daily_budget', True),
+                              used_requests_24h=usage[0], used_tokens_24h=usage[1],
+                              remaining_requests_24h=(max(0, provider['requests_per_day'] - usage[0])
+                                  if provider.get('enforce_daily_budget', True) else None),
+                              remaining_tokens_24h=(max(0, provider['tokens_per_day'] - usage[1])
+                                  if provider.get('enforce_daily_budget', True) else None),
                               blocked_until=blocked[0].astimezone(VIETNAM).isoformat() if blocked else None,
                               batch_size=provider.get('batch_size', 1), planned_requests=planned_requests,
                               selected_estimated_tokens=planned_tokens,
                               single_job_estimated_tokens=sum(estimates),
                               input_tokens_per_byte=ratios[False], batch_input_tokens_per_byte=ratios[True],
-                              selected_exceeding_request_budget=sum(t > min(provider['tokens_per_minute'],
-                                                                           provider['tokens_per_day']) for t in estimates)))
+                              selected_exceeding_request_budget=sum(t > request_token_limit(provider) for t in estimates)))
     report = dict(options=options, counts=dict(counts), by_source=dict(by_source), providers=providers,
                   sample=[dict(source_posting_id=row['source_posting_id'], title=row['title'], source=row['source'],
                                selection_date=row['selection_date'].astimezone(VIETNAM).isoformat(),

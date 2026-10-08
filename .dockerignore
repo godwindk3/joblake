@@ -7,5 +7,13 @@
 !orchestration/
 !orchestration/airflow/
 !orchestration/airflow/Dockerfile
+!orchestration/standalone/
+!orchestration/standalone/Dockerfile
+!orchestration/standalone/config.yaml
+!alembic.ini
+!migrations/
+!migrations/**
+!configs/
+!configs/**
 **/__pycache__/
 **/*.pyc

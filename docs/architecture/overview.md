@@ -40,6 +40,12 @@ Local PostgreSQL -> data health snapshot -> independent quality check
 
 ## Orchestration
 
+The optional [standalone Docker runner](../setup/standalone.md) provides three
+concurrent source slots without Airflow. It runs each source's phases in order,
+then a fresh health gate, optional enrichment/sync and due maintenance. Its fixed
+delay schedule and latest cycle result persist in a named volume. Use one
+orchestrator per database; the modes do not share a global scheduling lock.
+
 There are 13 DAGs: nine source DAGs, manual sync, optional manual enrichment,
 daily health at 07:00 and daily raw cleanup at 15:00, Asia/Ho_Chi_Minh. Scheduled
 maintenance DAGs start paused; unpause to activate their schedules. Cleanup

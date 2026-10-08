@@ -1,0 +1,31 @@
+# Paths are relative to the repository root (/opt/joblake in Docker).
+sources:
+  - topcv
+  - topdev
+  - itviec
+  - vietnamworks
+  - devwork
+  - careerviet
+  - vieclam24h
+  - careerlink
+  - jobsgo
+max_concurrent_sources: 3
+# Fixed delay after a completed cycle, not a wall-clock cron schedule.
+interval_seconds: 86400
+phase_timeout_seconds: 14400
+phase_retries: 2
+retry_delay_seconds: 60
+enrichment:
+  enabled: false
+  max_jobs: 100
+  timeout_seconds: 1500
+sync:
+  enabled: false
+  timeout_seconds: 1800
+cleanup:
+  enabled: true
+  apply: false
+  interval_seconds: 86400
+  timeout_seconds: 3600
+  max_objects: 200
+  max_mib: 250

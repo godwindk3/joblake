@@ -15,7 +15,11 @@ loại khỏi DAG enrichment thông thường. Chỉ chọn bản parse hiện t
 5. Chạy `joblake_supabase_sync` riêng để đưa kết quả thành công lên serving.
 
 DAG chạy thủ công, không tự chạy lại ngày hôm sau. Giới hạn thời gian dùng chung
-config enrichment (mặc định 20 phút, timeout task 25 phút). Không tự retry task;
+config enrichment: `max_run_seconds` trong `configs/enrichment.yaml` (mặc định
+1200 giây). Timeout task tự tính bằng giá trị này cộng 5 phút cho cả hai DAG;
+không cần sửa file Python khi tăng thời gian. Sau khi sửa YAML, chờ Airflow parse
+lại DAG và kiểm tra timeout mới trước khi trigger. Run đang chạy giữ cấu hình cũ.
+Giới hạn `max_jobs` và `max_api_attempts` vẫn áp dụng độc lập. Không tự retry task;
 queue giữ lịch sử retry. Hết quota thì giữ công việc trong queue để lần sau chạy tiếp.
 
 ## Tham số
@@ -64,6 +68,11 @@ Yêu cầu `date_from < date_to <= as_of`. Nếu chỉ nhập `date_to`, cửa s
   `selected_estimated_tokens` tính theo các nhóm, còn `single_job_estimated_tokens`
   là mức so sánh nếu chạy từng job. Đây là ước tính khi provider đó xử lý toàn bộ
   tập chọn; cooldown/quota còn lại có thể khiến nhóm thực tế thu nhỏ hoặc đổi provider.
+
+Gemini/Groq hiện dùng `enforce_daily_budget=false`: không chặn theo ngân sách
+24 giờ local, chờ API trả 429 rồi cooldown. Report vẫn có `used_requests_24h` và
+`used_tokens_24h`; các trường `remaining_*_24h` là null (không phải quota API vô hạn).
+Giới hạn theo phút, số request và thời gian mỗi run vẫn được giữ nguyên.
 
 Ước tính token cho từng provider là giả định provider đó xử lý cả nhóm, không
 cộng các provider lại thành nhu cầu thực tế. Quota là ledger local, không phải

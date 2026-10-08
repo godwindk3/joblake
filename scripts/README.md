@@ -7,6 +7,7 @@ Review options before applying writes. Legacy/reset tools are not normal setup.
 | Tool | Purpose and side effects |
 | --- | --- |
 | `docker.ps1` | Manage core/Airflow stacks; reset removes selected volumes |
+| `check_standalone.py` | Test a built standalone image using disposable Compose services/volumes, then remove them; no live crawl or publication |
 | `airflow.ps1` | Build, initialize and manage Airflow |
 | `run_ci_tests.py` | All tests with integration opt-ins; fail on skips; creates/drops uniquely named test databases |
 | `freeze_constraints.py` | Write installed dependency snapshot to constraints.txt |

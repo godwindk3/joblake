@@ -2,7 +2,15 @@
 import shlex
 import json
 from datetime import timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+import yaml
 from airflow.dag_processing.dagbag import DagBag
+import joblake_dag_config
+
+enrichment_config = yaml.safe_load(Path('/opt/joblake/configs/enrichment.yaml').read_text(encoding='utf-8'))
+enrichment_timeout = timedelta(seconds=enrichment_config['max_run_seconds'], minutes=5)
 
 for source in ("itviec", "vietnamworks", "topdev", "topcv", "devwork", "careerviet", "vieclam24h", "careerlink", "jobsgo"):
     dag_id = f"joblake_{source}"
@@ -81,6 +89,7 @@ assert set(dag.task_ids) == {'enrich_jobs'}
 task = dag.get_task('enrich_jobs')
 assert not task.upstream_task_ids and not task.downstream_task_ids
 assert task.retries == 0 and task.pool_slots == 1
+assert task.execution_timeout == enrichment_timeout
 assert dag.params['dry_run'] is True
 for preview in (False, True):
     rendered = task.render_template(task.bash_command, {'params': {'dry_run': preview, 'max_jobs': 5}})
@@ -100,7 +109,7 @@ assert dag.params['dry_run'] is True and dag.params['lookback_days'] == 30
 assert dag.params['date_field'] == 'first_seen_at' and dag.params['sort_order'] == 'newest_first'
 task = dag.get_task('backfill_jobs')
 assert task.pool == 'joblake_serial' and task.pool_slots == 1 and task.retries == 0
-assert task.execution_timeout == timedelta(minutes=25)
+assert task.execution_timeout == enrichment_timeout
 assert not task.do_xcom_push and task.append_env
 assert task.cwd == '/opt/joblake'
 assert not task.upstream_task_ids and not task.downstream_task_ids
@@ -115,6 +124,19 @@ for preview in (False, True):
     assert json.loads(rendered_env['JOBLAKE_BACKFILL_OPTIONS']) == params
     assert task.render_template(task.bash_command, {'params': params}) == task.bash_command
 print('joblake_enrichment_backfill: manual preview by default; parameters passed as JSON data')
+
+# Exercise config changes in this process only; never edit the production YAML.
+with TemporaryDirectory() as directory:
+    config_path = Path(directory) / 'enrichment.yaml'
+    with patch.object(joblake_dag_config, 'ENRICHMENT_CONFIG', config_path):
+        for seconds in (14400, 60):
+            config_path.write_text(f'max_run_seconds: {seconds}\n', encoding='utf-8')
+            for dag_id, task_id in (('joblake_enrichment', 'enrich_jobs'),
+                                    ('joblake_enrichment_backfill', 'backfill_jobs')):
+                changed = DagBag(dag_folder=f'/opt/airflow/dags/{dag_id}.py')
+                assert not changed.import_errors, changed.import_errors
+                assert changed.dags[dag_id].get_task(task_id).execution_timeout == timedelta(seconds=seconds + 300)
+print('enrichment DAGs: YAML budget changes update both task timeouts on reparse')
 
 bag = DagBag(dag_folder='/opt/airflow/dags/joblake_data_health.py')
 assert not bag.import_errors, bag.import_errors

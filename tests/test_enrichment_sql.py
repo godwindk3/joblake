@@ -113,6 +113,29 @@ class EnrichmentSQLTests(unittest.TestCase):
         self.assertIsNone(self.store.next_job(3))
         self.assertEqual(self.c.execute(query).fetchall(), [])
 
+    def test_api_daily_limit_mode_keeps_minute_limits_and_cooldown(self):
+        self.add_parse('Python required')
+        self.store.enqueue()
+        job = self.store.next_job(3)
+        provider = dict(name='groq', model='test', requests_per_day=1, tokens_per_day=100,
+                        requests_per_minute=2, tokens_per_minute=5000,
+                        enforce_daily_budget=False)
+        # Exhaust both daily counters using a request outside the minute window.
+        self.c.execute("""INSERT INTO core.enrichment_attempts
+            (provider,model,reserved_tokens,started_at) VALUES ('groq','test',5000,now()-interval '2 minutes')""")
+        self.assertTrue(self.store.can_retry_soon([provider], 2000))
+        request = self.store.reserve(job, provider, 2000)
+        self.assertIsNotNone(request)
+        self.store.finish(job, request, error='test_retry', tokens=1500)
+        self.c.execute("UPDATE core.job_enrichments SET next_attempt_at=now()-interval '1 minute'")
+        job = self.store.next_job(3)
+        self.assertIsNone(self.store.reserve(job, {**provider, 'tokens_per_minute': 3000}, 2000))
+        self.assertIsNone(self.store.reserve(job, {**provider, 'requests_per_minute': 1}, 2000))
+        self.store.block('groq', 'http_429', 3600)
+        self.assertIsNone(self.store.reserve(job, provider, 2000))
+        self.assertFalse(self.store.can_retry_soon([provider], 2000))
+        self.assertEqual(self.c.execute('SELECT count(*) FROM core.enrichment_attempts').fetchone()[0], 2)
+
     def test_real_sync_before_enrichment_then_after_and_stale_clear(self):
         self.c.execute("INSERT INTO crawl_state.crawl_runs VALUES (1,'test',true,'applied')")
         self.c.execute("INSERT INTO crawl_state.cdc_sources VALUES ('test','scope',1)")

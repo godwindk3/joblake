@@ -62,7 +62,9 @@ automated backup schedule or a verified recurring restore drill.
 
 ## Operational limits
 
-- Source, sync and enrichment DAGs are manual; no ingestion-to-sync scheduler exists.
+- Source, sync and enrichment Airflow DAGs are manual. The optional
+  [standalone runner](../setup/standalone.md) supplies an ingestion-to-sync schedule;
+  enrichment and sync start disabled.
 - Source tasks have request/state budgets but no Airflow `execution_timeout` yet.
 - Health failures appear in reports and Airflow; no email/chat notification sender
   or independent report watchdog is installed. The offline health CLI can be

@@ -9,6 +9,7 @@ repository root unless a page says otherwise.
 - [Local setup](setup/local.md): Python, dependencies, credentials and first run.
 - [PostgreSQL setup](setup/postgres.md): business schemas and migrations.
 - [Airflow setup](setup/airflow.md): Docker runtime and mounted configuration.
+- [Standalone Docker](setup/standalone.md): three concurrent sources and automatic cycles without Airflow.
 - [Architecture](architecture/overview.md): ingestion, enrichment, serving and monitoring.
 - [Storage and state](architecture/storage-state.md): claims, recovery and parse history.
 - [Location normalization](architecture/location-cities.md): cities and backfill.
