@@ -147,3 +147,85 @@ assert dag.get_task('check_quality').retries == 0
 assert dag.get_task('check_quality').execution_timeout == timedelta(minutes=2)
 assert dag.get_task('generate_report').retries == 2
 print('joblake_data_health: report saved before independent quality gate')
+
+# The daily DAG runs real commands in TaskGroups, so it does not need to
+# unpause/trigger child DAGs or occupy workers while waiting for child runs.
+import pendulum
+from airflow.timetables.base import TimeRestriction
+from airflow.timetables.interval import CronDataIntervalTimetable
+
+bag = DagBag(dag_folder='/opt/airflow/dags')
+assert not bag.import_errors, bag.import_errors
+daily = bag.dags['joblake_daily']
+assert isinstance(daily.timetable, CronDataIntervalTimetable)
+assert not daily.catchup and daily.is_paused_upon_creation is False
+assert daily.max_active_runs == 1 and daily.max_active_tasks == 3
+assert str(daily.timezone) == 'Asia/Ho_Chi_Minh'
+assert daily.params['dry_run'] is False and daily.params['apply'] is True
+assert bag.dags['joblake_raw_cleanup'].schedule is None
+source_names = ('itviec', 'vietnamworks', 'topdev', 'topcv', 'devwork',
+                'careerviet', 'vieclam24h', 'careerlink', 'jobsgo')
+ingestion_ids = {f'{source}.{phase}' for source in source_names
+                 for phase in ('discovery', 'detail', 'parse')}
+assert set(daily.task_ids) == ingestion_ids | {
+    'enrich_jobs', 'check_connection', 'sync_active_jobs', 'cleanup_raw', 'watcher',
+}
+for source in source_names:
+    for phase in ('discovery', 'detail', 'parse'):
+        task = daily.get_task(f'{source}.{phase}')
+        standalone = bag.dags[f'joblake_{source}'].get_task(phase)
+        # Prevent the combined pipeline from drifting from source-specific policy.
+        for attr in ('bash_command', 'cwd', 'retries', 'retry_delay',
+                     'retry_exponential_backoff', 'max_retry_delay',
+                     'pool', 'pool_slots', 'trigger_rule', 'do_xcom_push'):
+            assert getattr(task, attr) == getattr(standalone, attr), (task.task_id, attr)
+        previous = {'discovery': None, 'detail': 'discovery', 'parse': 'detail'}[phase]
+        assert task.upstream_task_ids == ({f'{source}.{previous}'} if previous else set())
+
+assert daily.get_task('enrich_jobs').upstream_task_ids == ingestion_ids
+assert daily.get_task('enrich_jobs').trigger_rule == 'all_done'
+assert daily.get_task('check_connection').upstream_task_ids == {'enrich_jobs'}
+assert daily.get_task('check_connection').trigger_rule == 'all_done'
+assert daily.get_task('sync_active_jobs').upstream_task_ids == {'check_connection'}
+assert daily.get_task('sync_active_jobs').trigger_rule == 'all_success'
+assert daily.get_task('cleanup_raw').upstream_task_ids == {'sync_active_jobs'}
+assert daily.get_task('cleanup_raw').trigger_rule == 'all_done'
+watcher = daily.get_task('watcher')
+assert watcher.upstream_task_ids == set(daily.task_ids) - {'watcher'}
+assert watcher.trigger_rule == 'one_failed' and watcher.retries == 0
+assert {task.task_id for task in daily.leaves} == {'watcher'}
+for task_id, standalone_id in (
+    ('enrich_jobs', 'joblake_enrichment'),
+    ('check_connection', 'joblake_supabase_sync'),
+    ('sync_active_jobs', 'joblake_supabase_sync'),
+    ('cleanup_raw', 'joblake_raw_cleanup'),
+):
+    task = daily.get_task(task_id)
+    standalone = bag.dags[standalone_id].get_task(task_id)
+    for attr in ('bash_command', 'cwd', 'retries', 'pool', 'pool_slots',
+                 'execution_timeout', 'do_xcom_push'):
+        assert getattr(task, attr) == getattr(standalone, attr), (task_id, attr)
+    for preview in (False, True):
+        params = dict(daily.params, dry_run=preview, apply=not preview)
+        rendered = task.render_template(task.bash_command, {'params': params})
+        if task_id in ('enrich_jobs', 'sync_active_jobs'):
+            assert ('--dry-run' in rendered) is preview
+        if task_id == 'cleanup_raw':
+            assert ('--apply' in rendered) is (not preview)
+            assert '--expired-days 7 --unknown-days 30 --max-objects 200 --max-mib 250' in rendered
+
+# A scheduler waking at 09:00 must run today's latest interval immediately.
+# Restarting on the same day must wait for tomorrow; days offline are skipped.
+restriction = TimeRestriction(earliest=daily.start_date, latest=None, catchup=False)
+clock_target = f'{CronDataIntervalTimetable._skip_to_latest.__module__}.utcnow'
+with patch(clock_target, return_value=pendulum.datetime(2026, 10, 14, 9, tz='Asia/Ho_Chi_Minh')):
+    first = daily.timetable.next_dagrun_info(last_automated_data_interval=None, restriction=restriction)
+    assert first.run_after == pendulum.datetime(2026, 10, 14, tz='Asia/Ho_Chi_Minh')
+    again = daily.timetable.next_dagrun_info(last_automated_data_interval=first.data_interval,
+                                           restriction=restriction)
+    assert again.run_after == pendulum.datetime(2026, 10, 15, tz='Asia/Ho_Chi_Minh')
+with patch(clock_target, return_value=pendulum.datetime(2026, 10, 18, 16, tz='Asia/Ho_Chi_Minh')):
+    resumed = daily.timetable.next_dagrun_info(last_automated_data_interval=first.data_interval,
+                                             restriction=restriction)
+    assert resumed.run_after == pendulum.datetime(2026, 10, 18, tz='Asia/Ho_Chi_Minh')
+print('joblake_daily: command parity, failure visibility, limits, startup and restart scheduling passed')

@@ -10,6 +10,12 @@ Explicit historical processing is available through the separate
 It has its own date/source/ID filters and defaults to a read-only dry run.
 Both workers share results, retry history, quota accounting and the session lock.
 
+The optional standalone DAG remains manual and previews by default.
+[`joblake_daily`](../setup/airflow.md) runs the same enrichment command after all
+nine source pipelines, with `dry_run=false` and `max_jobs=100`, then syncs to
+Supabase even if enrichment fails. The daily run still reports that failure.
+Existing time, quota and queue limits apply; one daily batch may leave backlog.
+
 ## Run in Airflow
 
 Open `joblake_enrichment`, enable it if paused, and choose **Trigger DAG**.

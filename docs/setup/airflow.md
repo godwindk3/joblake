@@ -1,6 +1,65 @@
 # Airflow local setup
 
-Runtime dùng chung cho 14 DAG: chín nguồn, sync, enrichment, enrichment backfill, data health và raw cleanup. Xem [vận hành các source](../operations/airflow-sources.md) để biết retry, pool, giới hạn và cách trigger.
+Runtime dùng chung cho 15 DAG: DAG tổng `joblake_daily`, chín nguồn, sync, enrichment, enrichment backfill, data health và raw cleanup. Xem [vận hành các source](../operations/airflow-sources.md) để biết retry, pool, giới hạn và cách trigger.
+
+## Hằng ngày: bật một lần, chạy cả pipeline
+
+Sau khi đã hoàn tất setup và tạo container một lần, **chỉ cần mở Docker Desktop**
+để Docker Engine khởi động. Bảy service chạy lâu dài (MinIO, PostgreSQL local,
+PostgreSQL metadata và bốn service Airflow) dùng `restart: always`, nên tự bật
+lại kể cả đã Stop container trước đó. `airflow-init` giữ `restart: "no"` vì chỉ
+dùng cho khởi tạo/migration. Không cần lệnh PowerShell hằng ngày.
+
+Lệnh dưới chỉ dùng cho setup lần đầu, áp dụng thay đổi Compose, hoặc tạo lại
+container đã bị xóa:
+
+```powershell
+.\scripts\docker.ps1 start
+```
+
+Lệnh này bật cả PostgreSQL/MinIO và Airflow. Mở http://localhost:8080 và theo dõi **`joblake_daily`**;
+không cần Trigger từng DAG hoặc unpause các DAG nguồn. DAG tổng mới được tạo ở
+trạng thái unpaused và chạy thật ngay khi scheduler nhận lịch đến hạn.
+
+Mở lại cửa sổ Docker Desktop khi Engine vẫn đang chạy không phải là khởi động
+lại Engine: nếu đã Stop container trong phiên đó, bấm Start nhóm container
+hoặc Quit Docker Desktop rồi mở lại. Đóng cửa sổ Docker Desktop có thể chỉ ẩn
+ứng dụng; dùng Quit để tắt Engine. Không xóa container/volume nếu muốn giữ lịch
+và trạng thái. Muốn ngừng tự cào lâu dài, pause `joblake_daily` trong Airflow;
+Stop container chỉ dừng đến lần Engine khởi động tiếp theo.
+
+Luồng: **9 nhóm nguồn (discovery → detail → parse) → enrichment → kiểm tra kết nối
+→ sync Supabase → raw cleanup**. Các bước chạy trực tiếp trong DAG tổng, không tạo
+12 lượt chạy ở các DAG riêng. Tối đa ba task dùng pool `joblake_serial` cùng lúc;
+sync và cleanup giữ cả ba slot. Một lượt tổng đang chạy sẽ chặn lượt tổng tiếp theo.
+
+- Lịch theo ngày, mốc 00:00 Asia/Ho_Chi_Minh, dùng `CronDataIntervalTimetable`
+  với `catchup=False`: bật muộn vẫn chạy lượt đến hạn gần nhất, bỏ qua ngày cũ.
+  Bật lại cùng ngày không tạo thêm lượt theo lịch; nếu giữ máy bật qua đêm,
+  lượt tiếp theo đến hạn lúc 00:00. Run cũ chưa xong vẫn cần hoàn tất/khắc phục.
+- Logical date trên UI là đầu khoảng dữ liệu (ngày trước), không phải giờ bật máy.
+  Lịch này không lọc crawler theo ngày; crawler vẫn đọc YAML/state hiện có.
+- `dry_run=false`: enrichment gọi API và sync ghi Supabase. `max_jobs=100` là
+  giới hạn API attempts/lượt; quota, thời gian và queue retry trong YAML vẫn áp dụng.
+  Một lượt thành công không đảm bảo đã xử lý hết backlog enrichment.
+- `apply=true`: cleanup xóa raw theo policy hiện có (expired ≥7 ngày hoặc unknown
+  ≥30 ngày cùng các điều kiện bảo vệ), tối đa 200 object/250 MiB mỗi attempt.
+  Retry có budget mới. Không xóa dữ liệu parsed trong PostgreSQL.
+- Một nguồn lỗi không chặn nguồn khác. Sau khi mọi phase cào kết thúc, enrichment,
+  sync và cleanup vẫn được thử; sync chỉ chạy nếu kiểm tra kết nối thành công.
+  Enrichment lỗi vẫn cho phép sync dữ liệu hiện có. `watcher` giữ trạng thái lượt
+  tổng là failed nếu bất kỳ bước nào lỗi, kể cả khi cleanup cuối cùng thành công.
+- Muốn dừng lịch: pause **`joblake_daily`**; pause không hủy task đang chạy.
+  Muốn thử riêng: dùng các DAG thủ công. Không trigger cùng nguồn trong lúc lượt
+  tổng đang chạy. Raw cleanup riêng đã bỏ lịch 15:00 để tránh chạy hai lần.
+- Chỉnh mặc định lịch chạy trong `orchestration/airflow/dags/joblake_daily.py`;
+  tham số nhập khi Trigger chỉ áp dụng cho lượt thủ công đó. `dry_run=true` chỉ
+  preview enrichment/sync; muốn preview cleanup phải đặt thêm `apply=false`.
+  Crawler vẫn chạy thật. Sửa lỗi rồi Clear task cần chạy lại cùng downstream và
+  `watcher`, thay vì Trigger lại cả chín nguồn.
+
+DAG/config được mount trực tiếp nên thay đổi này không cần build lại image.
+Nếu đã chủ động pause DAG tổng, khởi động lại không tự unpause; bật lại trên UI.
 
 ## Chuẩn bị và chạy
 
@@ -71,10 +130,11 @@ Clear task không bỏ qua `next_retry_at` hoặc giới hạn attempts. Một t
 công không có nghĩa toàn bộ backlog đã hết (có thể còn URL đang chờ retry).
 Record exhausted cần được xử lý theo state/parser policy, không chỉ Clear DAG.
 
-Chín source DAG, sync, enrichment và enrichment backfill không có lịch tự động. Data health có lịch
-07:00 và raw cleanup 15:00 Asia/Ho_Chi_Minh, nhưng mặc định paused; unpause mới
-kích hoạt lịch. Schedule, pool và Airflow retries nằm trong DAG, không nằm trong
-YAML crawler. Raw cleanup vẫn dry-run khi unpause nếu chưa đổi mặc định `apply`.
+Các DAG riêng của chín nguồn, sync, enrichment, enrichment backfill và raw cleanup
+không có lịch tự động; `joblake_daily` điều phối lịch hằng ngày. Data health có lịch
+07:00 Asia/Ho_Chi_Minh, mặc định paused; unpause mới kích hoạt lịch. Schedule, pool
+và Airflow retries nằm trong DAG, không nằm trong YAML crawler. Raw cleanup riêng
+vẫn mặc định dry-run; cleanup trong DAG tổng mặc định `apply=true`.
 
 ## Supabase
 

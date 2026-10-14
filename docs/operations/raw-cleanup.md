@@ -1,7 +1,9 @@
 # Raw HTML cleanup
 
-`joblake_raw_cleanup` runs at 15:00 Asia/Ho_Chi_Minh, starts paused, and
-defaults to dry-run. It reserves all three slots in the `joblake_serial` pool
+`joblake_raw_cleanup` is manual, starts paused, and defaults to dry-run.
+Daily retention now runs at the end of [`joblake_daily`](../setup/airflow.md),
+with `apply=true` and the same policy/limits. The former independent 15:00
+schedule is removed to avoid a second cleanup run. Each cleanup reserves all three slots in the `joblake_serial` pool
 to avoid overlapping ingestion, and uses the same PostgreSQL
 source advisory locks as discovery/detail/parse. Busy sources are skipped.
 
@@ -33,8 +35,9 @@ Dry-run reports DB candidates, not verified physical storage occupancy.
    and enabled expiration rules, which could bypass the DB protection policy.
    Review lifecycle configuration explicitly; this tool never changes it.
 4. Trigger the Airflow DAG with `apply=false` first, then `apply=true` for a
-   reviewed batch. Unpausing alone continues daily dry-runs. To make scheduled
-   executions delete, intentionally change the DAG's default `apply` parameter.
+   reviewed batch. Unpausing the standalone DAG does not schedule runs.
+   The daily pipeline already applies retention; set its default `apply=false`
+   to make future scheduled cleanup attempts previews.
 
 CLI example: `python -m joblake.raw_cleanup --apply --max-objects 200 --max-mib 250`.
 Airflow parameters also expose `expired_days` and `unknown_days`.
@@ -56,4 +59,6 @@ All writers must honor the source lock; external/manual MinIO writers are not
 coordinated by this mechanism.
 
 Do not roll back migration 0005: it records intentional deletions. To stop
-cleanup, pause the DAG or set `apply=false`.
+cleanup in the daily pipeline, set its default `apply=false` (or pause
+`joblake_daily` to stop the whole schedule). Pausing only the standalone cleanup
+DAG does not stop the cleanup task inside the daily pipeline.

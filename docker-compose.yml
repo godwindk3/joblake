@@ -23,7 +23,8 @@ services:
     volumes:
       - minio_data:/data
 
-    restart: unless-stopped
+    # Start again when Docker Desktop's engine starts, even after a manual stop.
+    restart: always
 
   postgres:
     logging: *log-rotation
@@ -48,7 +49,7 @@ services:
       retries: 10
       start_period: 10s
 
-    restart: unless-stopped
+    restart: always
 
 volumes:
   minio_data:

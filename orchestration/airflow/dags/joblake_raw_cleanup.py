@@ -1,4 +1,4 @@
-"""Daily bounded raw retention; processed PostgreSQL records are retained."""
+"""Manual bounded raw retention; daily retention is owned by joblake_daily."""
 from datetime import timedelta
 import pendulum
 from airflow.sdk import DAG, Param
@@ -8,7 +8,7 @@ with DAG(
     dag_id='joblake_raw_cleanup',
     description='Dry-run by default; delete only eligible MinIO raw HTML',
     start_date=pendulum.datetime(2026, 9, 19, tz='Asia/Ho_Chi_Minh'),
-    schedule='0 15 * * *',
+    schedule=None,
     catchup=False,
     is_paused_upon_creation=True,
     max_active_runs=1,

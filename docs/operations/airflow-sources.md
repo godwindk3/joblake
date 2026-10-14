@@ -39,6 +39,11 @@ dừng detail sau ba lỗi liên tiếp và không retry task detail ở Airflow
 
 ## Chạy
 
+Để tự chạy cả chín nguồn mỗi ngày cùng enrichment, sync Supabase và raw cleanup,
+dùng [`joblake_daily`](../setup/airflow.md#hằng-ngày-bật-một-lần-chạy-cả-pipeline).
+Sau setup một lần, chỉ cần mở Docker Desktop để Engine và stack tự bật; các DAG riêng bên dưới vẫn
+dành cho thao tác thủ công. DAG tổng dùng cùng command, retry và pool của nguồn.
+
 ### Chạy riêng một nguồn
 
 1. Mở http://localhost:8080.
