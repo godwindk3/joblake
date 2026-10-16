@@ -57,7 +57,13 @@ class LocationTests(unittest.TestCase):
           <h3 class="box-job-information-address-and-time-list__item--title">Thời gian làm việc</h3>
           <div class="box-job-information-address-and-time-list__item--content"><ul><li>Thứ 2 - Thứ 6</li></ul></div>
         </div><span>Địa điểm: Company HQ</span>'''
-        self.assertEqual(parse(TopCVParser(), html), (address, "Đà Nẵng: 2 Main Street"))
+        for heading in ('Địa điểm làm việc', 'Location'):
+            with self.subTest(heading=heading):
+                localized = html.replace('Địa điểm làm việc', heading)
+                self.assertEqual(
+                    parse(TopCVParser(), localized, {'address': 'Stale JSON-LD address'}),
+                    (address, "Đà Nẵng: 2 Main Street"),
+                )
 
     def test_observed_topdev_and_vietnamworks_structured_shapes(self):
         cases = (

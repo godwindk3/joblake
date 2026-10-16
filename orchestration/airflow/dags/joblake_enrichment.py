@@ -17,7 +17,7 @@ with DAG(
     tags=['joblake', 'enrichment', 'ai'],
     params={
         'dry_run': Param(True, type='boolean', description='Inspect eligibility without API calls or writes'),
-        'max_jobs': Param(100, type='integer', minimum=1, maximum=1000,
+        'max_jobs': Param(500, type='integer', minimum=1, maximum=1000,
                           description='Maximum API attempts this run, including failed calls'),
     },
 ) as dag:

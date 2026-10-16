@@ -17,8 +17,8 @@ phase_retries: 2
 retry_delay_seconds: 60
 enrichment:
   enabled: false
-  max_jobs: 100
-  timeout_seconds: 1500
+  max_jobs: 500
+  timeout_seconds: 7500 # Enrichment's 7200-second budget plus 5 minutes.
 sync:
   enabled: false
   timeout_seconds: 1800

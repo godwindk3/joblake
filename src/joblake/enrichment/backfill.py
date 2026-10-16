@@ -20,7 +20,7 @@ LOGGER = logging.getLogger(__name__)
 VIETNAM = timezone(timedelta(hours=7))
 DEFAULTS = dict(dry_run=True, lookback_days=30, date_from=None, date_to=None,
                 as_of=None, date_field='first_seen_at', sources=[], posting_ids=[],
-                sort_order='newest_first', max_jobs=100, max_api_attempts=100)
+                sort_order='newest_first', max_jobs=500, max_api_attempts=500)
 
 
 def timestamp(value):

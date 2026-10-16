@@ -33,9 +33,9 @@ with DAG(
                                                      'maximum': 9223372036854775807}, maxItems=1000,
                              description='core.source_job_postings IDs; combined with all other filters'),
         'sort_order': Param('newest_first', enum=['newest_first', 'oldest_first']),
-        'max_jobs': Param(100, type='integer', minimum=1, maximum=1000,
+        'max_jobs': Param(500, type='integer', minimum=1, maximum=1000,
                           description='Maximum distinct ready jobs selected'),
-        'max_api_attempts': Param(100, type='integer', minimum=1, maximum=1000,
+        'max_api_attempts': Param(500, type='integer', minimum=1, maximum=1000,
                                   description='Maximum API attempts, including retries/failures'),
     },
 ) as dag:

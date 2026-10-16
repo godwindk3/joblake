@@ -16,7 +16,7 @@ loại khỏi DAG enrichment thông thường. Chỉ chọn bản parse hiện t
 
 DAG chạy thủ công, không tự chạy lại ngày hôm sau. Giới hạn thời gian dùng chung
 config enrichment: `max_run_seconds` trong `configs/enrichment.yaml` (mặc định
-1200 giây). Timeout task tự tính bằng giá trị này cộng 5 phút cho cả hai DAG;
+7200 giây). Timeout task tự tính bằng giá trị này cộng 5 phút cho cả hai DAG;
 không cần sửa file Python khi tăng thời gian. Sau khi sửa YAML, chờ Airflow parse
 lại DAG và kiểm tra timeout mới trước khi trigger. Run đang chạy giữ cấu hình cũ.
 Giới hạn `max_jobs` và `max_api_attempts` vẫn áp dụng độc lập. Không tự retry task;
@@ -35,8 +35,8 @@ queue giữ lịch sử retry. Hết quota thì giữ công việc trong queue �
 | `sources` | `[]` | Mã nguồn, ví dụ `["topcv", "itviec"]`; rỗng lấy tất cả |
 | `posting_ids` | `[]` | ID của `core.source_job_postings`; rỗng lấy tất cả |
 | `sort_order` | `newest_first` | Mới → cũ, hoặc `oldest_first` |
-| `max_jobs` | `100` | Tối đa job sẵn sàng được chọn, từ 1 đến 1000 |
-| `max_api_attempts` | `100` | Tối đa lượt gọi API, gồm lỗi/retry, từ 1 đến 1000 |
+| `max_jobs` | `500` | Tối đa job sẵn sàng được chọn, từ 1 đến 1000 |
+| `max_api_attempts` | `500` | Tối đa lượt gọi API, gồm lỗi/retry, từ 1 đến 1000 |
 
 Các bộ lọc được kết hợp bằng AND, kể cả khi chỉ định ID. Muốn chọn các ID rất cũ,
 cần mở rộng khoảng ngày. `first_seen_at` giữ độ mới theo lần phát hiện đầu tiên;

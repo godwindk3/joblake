@@ -28,7 +28,7 @@ with DAG(
     params={
         'dry_run': Param(False, type='boolean',
                          description='Preview enrichment and sync only; crawlers still run'),
-        'max_jobs': Param(100, type='integer', minimum=1, maximum=1000,
+        'max_jobs': Param(500, type='integer', minimum=1, maximum=1000,
                           description='Maximum enrichment API attempts per daily run'),
         'apply': Param(True, type='boolean', description='Apply existing raw HTML retention policy'),
         'expired_days': Param(7, type='integer', minimum=1),

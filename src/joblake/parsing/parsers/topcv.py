@@ -18,9 +18,17 @@ from joblake.parsing.models import (
 )
 
 
+_SECTION_ALIASES = {
+    "Job Description": "Mô tả công việc",
+    "Candidate Requirements": "Yêu cầu ứng viên",
+    "Benefits": "Quyền lợi ứng viên",
+    "Location": "Địa điểm làm việc",
+}
+
+
 class TopCVParser(JobParser):
     source = "topcv"
-    version = "1.0.4"
+    version = "1.0.5"
 
     def parse(
         self,
@@ -124,7 +132,7 @@ def _locations(
     # Current layout nests an h3 address list beside the working-time list.
     for item in soup.select(".box-job-information-address-and-time-list__item"):
         heading = tag_text(item.select_one(".box-job-information-address-and-time-list__item--title"))
-        if heading != "Địa điểm làm việc":
+        if heading not in ("Địa điểm làm việc", "Location"):
             continue
         content = item.select_one(".box-job-information-address-and-time-list__item--content")
         if content is not None:
@@ -144,7 +152,9 @@ def _locations(
 def _job_categories(soup: BeautifulSoup) -> tuple[str, ...]:
     for group in soup.select("div.job-tags__group"):
         group_name = tag_text(group.select_one(".job-tags__group-name"))
-        if group_name and "Chuyên môn:" in group_name:
+        if group_name and (
+            "Chuyên môn:" in group_name or group_name == "Specialization:"
+        ):
             return clean_items(
                 element.get_text(" ", strip=True)
                 for element in group.select("a.item")
@@ -188,4 +198,5 @@ def _add_section(
         return
     section_text = text_without_leading_heading(content, heading_text)
     if section_text:
-        result[heading_text] = section_text
+        # TopCV uses English section labels on English-language job pages.
+        result[_SECTION_ALIASES.get(heading_text, heading_text)] = section_text

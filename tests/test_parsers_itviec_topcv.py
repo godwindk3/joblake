@@ -70,6 +70,57 @@ class ITviecParserTests(unittest.TestCase):
 
 class TopCVParserTests(unittest.TestCase):
 
+    def test_english_sections_in_normal_and_premium_layouts(self) -> None:
+        # English headings observed in the 19 rejected pages on 2026-10-16.
+        for marker, box, title, content in (
+            ('<div id="job-detail" data-job-title="Engineer"></div>'
+             '<div class="box-company-info__detail"><a class="name">Acme</a></div>',
+             'box-job-information-detail-item',
+             'box-job-information-detail-item__title--title',
+             'box-job-information-detail-item__text'),
+            ('<h2 class="premium-job-basic-information__content--title">Engineer</h2>'
+             '<a class="company-content__name"><h1 class="title">Acme</h1></a>',
+             'premium-job-description__box', 'premium-job-description__box--title',
+             'premium-job-description__box--content'),
+        ):
+            with self.subTest(layout=box):
+                html = marker + '''<div class="job-tags__group">
+                <h3 class="job-tags__group-name">Specialization:</h3>
+                <a class="item">Backend</a></div>'''
+                for heading, text in (
+                    ('Job Description', 'Build APIs.'),
+                    ('Candidate Requirements', 'Know Python.'),
+                    ('Benefits', 'Annual bonus.'),
+                    ('Location', 'Hà Nội: 12 Duy Tân'),
+                ):
+                    html += f'''<div class="{box}">
+                    <h2 class="{title}">{heading}</h2>
+                    <div class="{content}"><p>{heading}</p><p>{text}</p></div>
+                    </div>'''
+                output = TopCVParser().parse(html, _context('topcv'))
+                self.assertEqual(output.job.description_text, 'Build APIs.')
+                self.assertEqual(output.job.requirements_text, 'Know Python.')
+                self.assertEqual(output.job.benefits_text, 'Annual bonus.')
+                self.assertEqual(output.job.categories_raw, ('Backend',))
+                self.assertEqual(output.job.locations_raw, ('Hà Nội: 12 Duy Tân',))
+                self.assertTrue(assess_parsed_job(output).is_accepted)
+
+    def test_english_headings_without_content_still_rejected(self) -> None:
+        html = '''<div id="job-detail" data-job-title="Engineer"></div>
+        <div class="box-company-info__detail"><a class="name">Acme</a></div>
+        <div class="box-job-information-detail-item">
+          <h2 class="box-job-information-detail-item__title--title">Job Description</h2>
+          <div class="box-job-information-detail-item__text">Job Description</div>
+        </div>
+        <div class="box-job-information-detail-item">
+          <h2 class="box-job-information-detail-item__title--title">Benefits</h2>
+          <div class="box-job-information-detail-item__text">Annual bonus.</div>
+        </div>'''
+        output = TopCVParser().parse(html, _context('topcv'))
+        self.assertIsNone(output.job.description_text)
+        self.assertIn('job_content', assess_parsed_job(output).missing_required_fields)
+        self.assertEqual(assess_parsed_job(output).status, 'rejected')
+
     def test_locations_from_job_posting_in_both_layouts(self) -> None:
         posting = {
             "@type": "JobPosting",

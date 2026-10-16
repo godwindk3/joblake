@@ -12,7 +12,7 @@ Both workers share results, retry history, quota accounting and the session lock
 
 The optional standalone DAG remains manual and previews by default.
 [`joblake_daily`](../setup/airflow.md) runs the same enrichment command after all
-nine source pipelines, with `dry_run=false` and `max_jobs=100`, then syncs to
+nine source pipelines, with `dry_run=false` and `max_jobs=500`, then syncs to
 Supabase even if enrichment fails. The daily run still reports that failure.
 Existing time, quota and queue limits apply; one daily batch may leave backlog.
 
@@ -23,7 +23,7 @@ Open `joblake_enrichment`, enable it if paused, and choose **Trigger DAG**.
 - `dry_run=true` (default): report eligible count and queue status; no API calls
   and no database writes.
 - `dry_run=false`: enqueue and process eligible records.
-- `max_jobs=100` (default): maximum API attempts for this run, including failures.
+- `max_jobs=500` (default): maximum API attempts for this run, including failures.
 
 Open the run, select `enrich_jobs`, then **Logs**. Logs show posting/enrichment IDs,
 provider/model, attempt number, tokens, duration, error codes and final queue totals.
@@ -32,7 +32,7 @@ runs with `-u`, so log output is not buffered. Times in logs are UTC.
 
 The DAG is manual (`schedule=None`), with one active run and no automatic Airflow
 retries. The persistent queue owns retries. Its processing budget is
-`max_run_seconds` in `configs/enrichment.yaml` (default 1200 seconds), plus the
+`max_run_seconds` in `configs/enrichment.yaml` (default 7200 seconds), plus the
 final request. Both enrichment DAGs derive their Airflow task timeout from that
 same setting plus 5 minutes; no DAG source edit is needed. For example, 14400
 seconds gives a 4-hour processing budget and a 4-hour-5-minute task timeout.

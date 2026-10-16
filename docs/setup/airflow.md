@@ -39,7 +39,7 @@ sync và cleanup giữ cả ba slot. Một lượt tổng đang chạy sẽ ch�
   lượt tiếp theo đến hạn lúc 00:00. Run cũ chưa xong vẫn cần hoàn tất/khắc phục.
 - Logical date trên UI là đầu khoảng dữ liệu (ngày trước), không phải giờ bật máy.
   Lịch này không lọc crawler theo ngày; crawler vẫn đọc YAML/state hiện có.
-- `dry_run=false`: enrichment gọi API và sync ghi Supabase. `max_jobs=100` là
+- `dry_run=false`: enrichment gọi API và sync ghi Supabase. `max_jobs=500` là
   giới hạn API attempts/lượt; quota, thời gian và queue retry trong YAML vẫn áp dụng.
   Một lượt thành công không đảm bảo đã xử lý hết backlog enrichment.
 - `apply=true`: cleanup xóa raw theo policy hiện có (expired ≥7 ngày hoặc unknown
