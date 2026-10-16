@@ -46,8 +46,8 @@ Scopes:
 
 Actions:
   config    Validate and print resolved Compose configuration.
-  pull      Pull all required images.
-  build     Build the JobLake Airflow runtime image.
+  pull      Pull upstream images (MinIO is built from source).
+  build     Build MinIO and/or the JobLake Airflow runtime image.
   init      Start core services and migrate the Airflow metadata database.
   start     Create and start services in the background.
   stop      Stop containers without removing them.
@@ -160,11 +160,14 @@ switch ($Action) {
                 Invoke-Compose -Stack $stack -CommandArguments @("pull", "airflow-postgres")
             }
             else {
-                Invoke-Compose -Stack $stack -CommandArguments @("pull")
+                Invoke-Compose -Stack $stack -CommandArguments @("pull", "postgres")
             }
         }
     }
     "build" {
+        if ($Scope -in @("all", "core")) {
+            Invoke-Compose -Stack "core" -CommandArguments @("build", "minio")
+        }
         if ($Scope -in @("all", "airflow")) {
             Invoke-Compose -Stack "airflow" -CommandArguments @("build", "airflow-scheduler")
         }

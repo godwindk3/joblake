@@ -7,7 +7,9 @@ x-log-rotation: &log-rotation
 services:
   minio:
     logging: *log-rotation
-    image: quay.io/minio/minio
+    image: joblake-minio:RELEASE.2025-10-15T17-29-55Z
+    build: ./orchestration/minio
+    pull_policy: build
     container_name: joblake-minio
 
     command: server /data --console-address ":9001"

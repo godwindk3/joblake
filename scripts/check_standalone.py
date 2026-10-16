@@ -31,6 +31,8 @@ def main():
 
         try:
             run('config', '--quiet')
+            # Fail clearly during the dependency build, before starting services.
+            run('build', 'minio')
             run('run', '--rm', 'joblake-init')
             run('run', '--rm', '--no-deps', 'joblake-runner', 'validate')
             run('run', '--rm', '--no-deps', '--entrypoint', 'python', 'joblake-runner', '-m', 'pip', 'check')

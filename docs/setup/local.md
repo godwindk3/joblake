@@ -31,6 +31,12 @@ python -m unittest discover -s tests
 
 See [PostgreSQL schema setup](postgres.md) and [optional Airflow setup](airflow.md). Airflow does not migrate JobLake business schemas automatically.
 
+MinIO builds automatically from a pinned, checksum-verified official source
+release in `orchestration/minio/Dockerfile`; the first start needs Internet access
+to download the source and Go dependencies. `scripts/docker.ps1 build core`
+prebuilds it. The `pull core` command downloads PostgreSQL only, since the old
+public MinIO image is unavailable. Existing volume names and credentials are retained.
+
 ## First run and health
 
 ```powershell

@@ -50,7 +50,9 @@ services:
     logging: *logging
 
   minio:
-    image: quay.io/minio/minio
+    image: joblake-minio:RELEASE.2025-10-15T17-29-55Z
+    build: ./orchestration/minio
+    pull_policy: build
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY in .env}

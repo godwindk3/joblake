@@ -7,6 +7,12 @@ Python, CloakBrowser, browser system libraries and Xvfb are inside the image.
 Only Docker Engine with Compose v2 (or Docker Desktop with Linux containers)
 is needed on the host.
 
+MinIO is built from the official `RELEASE.2025-10-15T17-29-55Z` source with a
+verified SHA-256 in `orchestration/minio/Dockerfile`. Its old upstream container
+registry no longer allows public pulls. Both Compose stacks use the same local
+image and cached build; the first build needs Internet access and takes longer
+while downloading Go dependencies and compiling MinIO. No registry login is needed.
+
 ## First deployment
 
 Run from the repository root. Copy `.env.example` to `.env` if it does not exist
